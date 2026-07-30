@@ -1,0 +1,97 @@
+# Maintenance, performance and modernisation opportunities.
+
+- id: outdated_cms
+  title: "${cms} ${detected_version} is out of date"
+  category: maintenance
+  urgency: high
+  requires:
+    - { kind: finding_failed, check_id: "CMS-02" }
+  evidence_from: ["CMS-02"]
+  description_template: >
+    ${domain} runs ${cms} ${detected_version}. Releases this old no longer
+    receive security fixes, and the version number is published in the page
+    source where anyone can read it. Upgrading also unblocks plugin and theme
+    updates that have been waiting on it.
+  pitch_angle: >
+    The version is public — show them where it appears in their own page
+    source. Propose a managed update plan rather than a one-off upgrade;
+    the recurring work is the more valuable engagement.
+
+- id: performance_no_cdn
+  title: "Slow server response and no CDN"
+  category: performance
+  urgency: medium
+  requires:
+    - { kind: finding_failed, check_id: "PERF-01" }
+    - { kind: finding_failed, check_id: "PERF-03" }
+  evidence_from: ["PERF-01"]
+  description_template: >
+    ${domain} took ${ttfb_ms} ms to send the first byte and does not sit
+    behind a content delivery network, so every visitor is served from the
+    origin server regardless of where they are. Visitors abandon slow pages,
+    and page speed is a ranking signal.
+  pitch_angle: >
+    Bring a measurement they can reproduce. A CDN is usually the cheapest
+    single improvement available and the result is immediately visible.
+
+- id: not_mobile_ready
+  title: "Site is not usable on mobile"
+  category: development
+  urgency: high
+  requires:
+    - { kind: finding_failed, check_id: "PERF-04" }
+  evidence_from: ["PERF-04"]
+  description_template: >
+    ${domain} does not declare a mobile viewport, so phone browsers render it
+    at desktop width and zoom out. On a phone the site is close to unusable —
+    and for most local searches, the phone is where the customer is.
+  pitch_angle: >
+    Ask them to open their own site on their phone. This one demonstrates
+    itself in five seconds and needs no technical explanation.
+
+- id: mixed_content
+  title: "HTTPS migration is incomplete"
+  category: security
+  urgency: high
+  requires:
+    - { kind: finding_failed, check_id: "CNT-01" }
+  evidence_from: ["CNT-01"]
+  description_template: >
+    Pages on ${domain} are served over HTTPS but load some resources over
+    plain HTTP. Browsers block those requests, which breaks styling and
+    functionality and removes the padlock from the address bar.
+  pitch_angle: >
+    Someone already did the hard part of moving to HTTPS and stopped short.
+    Position it as finishing existing work rather than starting new work.
+
+- id: no_analytics
+  title: "No website analytics installed"
+  category: marketing
+  urgency: low
+  requires:
+    - { kind: artifact_falsy, plugin: technologies, key: has_analytics }
+  evidence_from: []
+  description_template: >
+    No analytics tooling was detected on ${domain}. Without it there is no
+    way to know how many visitors arrive, where they come from, or which
+    pages lead to enquiries — which makes every marketing decision a guess.
+  pitch_angle: >
+    Frame it as measurement before spend. Hard to justify a marketing budget
+    when nobody can report on the result.
+
+- id: cookie_consent_missing
+  title: "Tracking scripts run without a consent banner"
+  category: compliance
+  urgency: medium
+  requires:
+    - { kind: artifact_truthy, plugin: technologies, key: has_analytics }
+    - { kind: finding_failed, check_id: "PRV-02" }
+  evidence_from: ["PRV-02"]
+  description_template: >
+    ${domain} loads third-party tracking scripts but shows no cookie consent
+    banner. In the UK, EU and several US states that combination creates
+    regulatory exposure, and it is straightforward to correct.
+  pitch_angle: >
+    Compliance framing works better than technical framing here. Keep it
+    factual and recommend they confirm the specifics with their own legal
+    advisor — do not present yourself as giving legal advice.

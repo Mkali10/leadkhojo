@@ -1,0 +1,156 @@
+# Security opportunities.
+#
+# WRITING RULES FOR THIS FILE
+#
+#   1. Specific, or absent. If the template cannot be filled with concrete
+#      values, the engine produces nothing. That is correct behaviour, not a
+#      gap to work around.
+#   2. Business consequence, not technical restatement. "Every visitor sees a
+#      security warning" beats "certificate validity period ending".
+#   3. Never alarmist. State the fact and its consequence. No threat framing,
+#      no manufactured urgency. A message that reads as pressure is a defect.
+#
+# Placeholders come from the evidence of the checks named in evidence_from.
+
+- id: ssl_expired
+  title: "Urgent: SSL certificate has expired"
+  category: security
+  urgency: critical
+  requires:
+    - { kind: finding_failed, check_id: "TLS-03" }
+  evidence_from: ["TLS-03"]
+  supersedes: ["ssl_renewal"]
+  description_template: >
+    The SSL certificate for ${domain} expired ${days_expired} days ago.
+    Every visitor now sees a full-page browser security warning before they
+    can reach the site, and most will leave rather than click through it.
+  pitch_angle: >
+    This is verifiable in ten seconds and the site is effectively offline
+    right now. Lead with the fact, offer to fix it today, and propose
+    automated renewal so it cannot happen again.
+
+- id: ssl_renewal
+  title: "SSL certificate expires in ${days_remaining} days"
+  category: security
+  urgency: critical
+  requires:
+    - { kind: finding_failed, check_id: "TLS-04" }
+  evidence_from: ["TLS-04"]
+  description_template: >
+    The SSL certificate for ${domain} expires on ${not_after} — in
+    ${days_remaining} days. When it lapses, every visitor sees a full-page
+    browser security warning and the site is effectively offline for most
+    of them.
+  pitch_angle: >
+    Lead with the date. It is verifiable in ten seconds and creates a real
+    deadline without any pressure tactics. Offer certificate management with
+    automated renewal rather than a one-off fix.
+
+- id: no_https
+  title: "Site is not served over HTTPS"
+  category: security
+  urgency: critical
+  requires:
+    - { kind: finding_failed, check_id: "TLS-01" }
+  evidence_from: ["TLS-01"]
+  description_template: >
+    ${domain} is served over plain HTTP. Browsers label it "Not secure" in
+    the address bar, anything a visitor types travels unencrypted, and search
+    engines rank it below equivalent secure sites.
+  pitch_angle: >
+    The "Not secure" label is visible to the owner in their own browser —
+    ask them to look. Certificates are free; the work is configuration and
+    fixing mixed content.
+
+- id: email_spoofing_risk
+  title: "Domain can be impersonated in email"
+  category: security
+  urgency: high
+  requires:
+    - { kind: finding_failed, check_id: "DNS-03" }
+  evidence_from: ["DNS-03", "DNS-01"]
+  description_template: >
+    ${domain} publishes no DMARC record. Without one, receiving mail servers
+    have no instruction about forged mail claiming to come from this domain,
+    and the owner receives no reports when it happens. Invoice fraud and
+    supplier impersonation both depend on this gap.
+  pitch_angle: >
+    Frame it as brand protection rather than a technical gap: anyone can send
+    email that appears to come from their domain. Offer a staged rollout —
+    monitoring first, then enforcement.
+
+- id: dmarc_not_enforcing
+  title: "DMARC is monitoring but not blocking"
+  category: security
+  urgency: medium
+  requires:
+    - { kind: finding_failed, check_id: "DNS-04" }
+  evidence_from: ["DNS-04"]
+  description_template: >
+    ${domain} has a DMARC record set to "p=${policy}", which collects reports
+    but still tells receiving servers to deliver forged mail. The domain is
+    observed but not protected.
+  pitch_angle: >
+    They already started — someone published the record. Position this as
+    finishing the job: review the reports, then move to quarantine and reject.
+
+- id: spf_too_permissive
+  title: "SPF record authorises any sender"
+  category: security
+  urgency: high
+  requires:
+    - { kind: finding_failed, check_id: "DNS-02" }
+  evidence_from: ["DNS-02"]
+  description_template: >
+    The SPF record for ${domain} ends in "+all", which authorises every mail
+    server on the internet to send as this domain. It is equivalent to having
+    no SPF record, but harder to notice because the record exists.
+  pitch_angle: >
+    A one-character fix with real impact. Good opener for a wider email
+    authentication review.
+
+- id: missing_security_headers
+  title: "Security headers are not configured"
+  category: security
+  urgency: medium
+  requires:
+    - { kind: finding_failed, check_id: "HDR-01" }
+    - { kind: finding_failed, check_id: "HDR-02" }
+  evidence_from: ["HDR-01", "HDR-02"]
+  description_template: >
+    ${domain} does not send HSTS or Content-Security-Policy headers. These are
+    the standard browser-level defences against connection downgrade and
+    script injection, and they are configuration rather than code changes.
+  pitch_angle: >
+    Low-risk, high-visibility work. Show a before/after from a public header
+    checker — the improvement is immediately verifiable by the client.
+
+- id: login_over_http
+  title: "Urgent: admin login is unencrypted"
+  category: security
+  urgency: critical
+  requires:
+    - { kind: finding_failed, check_id: "CMS-03" }
+  evidence_from: ["CMS-03"]
+  description_template: >
+    The administrator login page at ${url} is served without encryption, so
+    the username and password typed into it travel across the network in
+    readable form.
+  pitch_angle: >
+    Report this plainly and offer to fix it immediately. Do not dramatise it —
+    the fact is serious enough on its own.
+
+- id: version_disclosure
+  title: "Server software version is publicly disclosed"
+  category: security
+  urgency: low
+  requires:
+    - { kind: finding_failed, check_id: "HDR-07" }
+  evidence_from: ["HDR-07"]
+  description_template: >
+    ${domain} publishes its exact server software version in response headers.
+    That tells anyone scanning for targets which published vulnerabilities to
+    try first, and it is removed with a single configuration line.
+  pitch_angle: >
+    Small on its own. Use it as supporting evidence in a broader hardening
+    proposal rather than as the headline.
