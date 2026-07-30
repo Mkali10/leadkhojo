@@ -48,10 +48,7 @@ def test_a_more_specific_allow_beats_a_broader_disallow() -> None:
 
 
 def test_a_group_naming_our_agent_wins_over_the_wildcard() -> None:
-    body = (
-        "User-agent: *\nDisallow: /\n\n"
-        "User-agent: LeadKhojoBot\nDisallow: /admin\n"
-    )
+    body = "User-agent: *\nDisallow: /\n\nUser-agent: LeadKhojoBot\nDisallow: /admin\n"
     rules = parse_robots(body, UA)
 
     assert rules.is_allowed("https://acme.com/contact")  # wildcard would deny
@@ -71,9 +68,7 @@ def test_wildcards_and_end_anchors_are_honoured() -> None:
 
 
 def test_sitemaps_are_collected() -> None:
-    rules = parse_robots(
-        "Sitemap: https://acme.com/sitemap.xml\nUser-agent: *\nDisallow:\n", UA
-    )
+    rules = parse_robots("Sitemap: https://acme.com/sitemap.xml\nUser-agent: *\nDisallow:\n", UA)
     assert rules.sitemaps == ("https://acme.com/sitemap.xml",)
 
 
@@ -102,7 +97,7 @@ def test_comments_and_odd_spacing_are_tolerated() -> None:
         "172.16.5.4",  # RFC1918
         "192.168.1.1",  # RFC1918
         "169.254.169.254",  # cloud metadata — the classic SSRF target
-        "0.0.0.0",  # noqa: S104 - the value under test
+        "0.0.0.0",
         "100.64.0.1",  # carrier-grade NAT
         "::1",  # IPv6 loopback
         "fc00::1",  # IPv6 unique local
@@ -128,7 +123,7 @@ def test_an_unparseable_address_is_refused_rather_than_guessed() -> None:
 
 def test_only_web_ports_are_permitted() -> None:
     """Connecting anywhere else would make this a port scanner."""
-    assert ALLOWED_PORTS == frozenset({80, 443})
+    assert frozenset({80, 443}) == ALLOWED_PORTS
     assert_allowed_port(80)
     assert_allowed_port(443)
 

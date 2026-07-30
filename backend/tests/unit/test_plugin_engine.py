@@ -75,9 +75,7 @@ def test_order_is_deterministic_across_input_orderings() -> None:
 
 
 def test_a_deep_dependency_chain_resolves() -> None:
-    order = resolve_order(
-        [_Stub("d", ("c",)), _Stub("c", ("b",)), _Stub("b", ("a",)), _Stub("a")]
-    )
+    order = resolve_order([_Stub("d", ("c",)), _Stub("c", ("b",)), _Stub("b", ("a",)), _Stub("a")])
     assert [p.meta.id for p in order] == ["a", "b", "c", "d"]
 
 

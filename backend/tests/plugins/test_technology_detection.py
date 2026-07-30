@@ -60,8 +60,7 @@ def test_a_malformed_rule_pack_fails_at_startup(tmp_path: Path) -> None:
     tech = tmp_path / "technology"
     tech.mkdir()
     (tech / "broken.yaml").write_text(
-        "- id: broken\n  category: cms\n  signals:\n"
-        "    - {type: html, pattern: '([unclosed'}\n",
+        "- id: broken\n  category: cms\n  signals:\n    - {type: html, pattern: '([unclosed'}\n",
         encoding="utf-8",
     )
     with pytest.raises(RuleLoadError, match="invalid regex"):
@@ -133,7 +132,9 @@ def test_cdn_is_detected_from_a_marker_header(packs, now) -> None:  # type: igno
 def test_analytics_detection_sets_the_has_analytics_flag(packs, now) -> None:  # type: ignore[no-untyped-def]
     ctx = PluginContext.for_testing(
         snapshot=make_snapshot(
-            pages=(make_page(html='<script src="https://www.googletagmanager.com/gtm.js"></script>'),)
+            pages=(
+                make_page(html='<script src="https://www.googletagmanager.com/gtm.js"></script>'),
+            )
         ),
         now=now,
     )

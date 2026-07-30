@@ -16,13 +16,12 @@ import pytest
 
 from leadkhojo.core.findings import Finding
 from leadkhojo.core.types import FindingStatus, Severity
-from leadkhojo.crawler.snapshot import CookieInfo
+from leadkhojo.crawler.snapshot import CookieInfo, Timings
 from leadkhojo.plugins.base import PluginContext
 from leadkhojo.plugins.builtin.dns_plugin import DnsPlugin
 from leadkhojo.plugins.builtin.headers_plugin import HeadersPlugin
 from leadkhojo.plugins.builtin.performance_plugin import PerformancePlugin
 from leadkhojo.plugins.builtin.ssl_plugin import SslPlugin
-from leadkhojo.crawler.snapshot import Timings
 from tests.conftest import make_dns, make_page, make_snapshot, make_tls
 
 
@@ -96,9 +95,7 @@ def test_a_hostname_mismatch_is_critical(now: datetime) -> None:
 
 
 def test_a_self_signed_certificate_is_reported(now: datetime) -> None:
-    ctx = PluginContext.for_testing(
-        snapshot=make_snapshot(tls=make_tls(self_signed=True)), now=now
-    )
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(tls=make_tls(self_signed=True)), now=now)
     assert find(SslPlugin().run(ctx).findings, "TLS-08").status is FindingStatus.FAIL
 
 
@@ -276,9 +273,7 @@ def test_no_cookies_means_the_cookie_checks_do_not_apply(now: datetime) -> None:
 
 def test_mixed_content_is_detected_on_https_pages(now: datetime) -> None:
     html = '<html><body><img src="http://cdn.example.com/logo.png"></body></html>'
-    ctx = PluginContext.for_testing(
-        snapshot=make_snapshot(pages=(make_page(html=html),)), now=now
-    )
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(pages=(make_page(html=html),)), now=now)
     assert find(HeadersPlugin().run(ctx).findings, "CNT-01").status is FindingStatus.FAIL
 
 
@@ -292,16 +287,12 @@ def test_mixed_content_does_not_apply_to_http_sites(now: datetime) -> None:
 
 def test_a_cms_version_in_the_page_source_is_reported(now: datetime) -> None:
     html = '<meta name="generator" content="WordPress 5.4.2">'
-    ctx = PluginContext.for_testing(
-        snapshot=make_snapshot(pages=(make_page(html=html),)), now=now
-    )
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(pages=(make_page(html=html),)), now=now)
     assert find(HeadersPlugin().run(ctx).findings, "CNT-02").status is FindingStatus.FAIL
 
 
 def test_a_broken_page_makes_every_header_check_not_applicable(now: datetime) -> None:
-    ctx = PluginContext.for_testing(
-        snapshot=make_snapshot(pages=(make_page(status=500),)), now=now
-    )
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(pages=(make_page(status=500),)), now=now)
     findings = HeadersPlugin().run(ctx).findings
 
     for check in ("HDR-01", "HDR-02", "CKY-01", "CNT-01"):
@@ -340,9 +331,7 @@ def test_a_missing_mobile_viewport_is_high_severity(now: datetime) -> None:
 
 def test_a_declared_viewport_passes(now: datetime) -> None:
     html = '<html><head><meta name="viewport" content="width=device-width"></head></html>'
-    ctx = PluginContext.for_testing(
-        snapshot=make_snapshot(pages=(make_page(html=html),)), now=now
-    )
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(pages=(make_page(html=html),)), now=now)
     assert find(PerformancePlugin().run(ctx).findings, "PERF-04").status is FindingStatus.PASS
 
 

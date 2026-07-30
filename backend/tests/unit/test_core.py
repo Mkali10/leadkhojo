@@ -184,7 +184,7 @@ def test_passing_findings_may_be_evidence_light() -> None:
 
 
 def test_not_applicable_records_why_we_could_not_check() -> None:
-    """"We could not check" is not "you failed"."""
+    """ "We could not check" is not "you failed"."""
     finding = Finding.not_applicable(
         "TLS-04", plugin_id="ssl", category="tls", reason="No TLS connection"
     )
