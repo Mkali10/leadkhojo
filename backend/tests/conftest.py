@@ -12,7 +12,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from leadkhojo.core.config import Settings
 from leadkhojo.core.types import (
     Domain,
     PageType,
@@ -27,6 +31,7 @@ from leadkhojo.crawler.snapshot import (
     Timings,
     TlsInfo,
 )
+from leadkhojo.db.base import Base
 
 FIXTURES = Path(__file__).parent / "fixtures" / "snapshots"
 
@@ -144,3 +149,48 @@ def load_fixture():  # type: ignore[no-untyped-def]
 @pytest.fixture(scope="session")
 def rules_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "rules"
+
+
+# ---------------------------------------------------------------- database
+# Tests run against SQLite so the suite needs no service. The schema targets
+# PostgreSQL; JSON/UUID columns use dialect variants so the models are
+# identical either way.
+#
+# What SQLite cannot exercise, and must be verified against real PostgreSQL:
+#   * FOR UPDATE SKIP LOCKED in the job queue (no row locking in SQLite)
+#   * JSONB operators, if we ever query inside a snapshot payload
+
+
+@pytest_asyncio.fixture
+async def engine():  # type: ignore[no-untyped-def]
+    """A fresh in-memory database per test. No cross-test leakage."""
+    test_engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    async with test_engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+        # SQLite ignores foreign keys unless asked, which would silently hide
+        # every cascade-delete bug we care about.
+        await connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+    try:
+        yield test_engine
+    finally:
+        await test_engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def session(engine):  # type: ignore[no-untyped-def]
+    factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    async with factory() as db_session:
+        # PRAGMA is per-connection, so re-assert it on this one.
+        await db_session.execute(text("PRAGMA foreign_keys=ON"))
+        yield db_session
+
+
+@pytest.fixture
+def test_settings(tmp_path) -> Settings:  # type: ignore[no-untyped-def]
+    return Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        database_url="sqlite+aiosqlite:///:memory:",
+        rules_dir=Path(__file__).resolve().parents[2] / "rules",
+        export_dir=tmp_path / "exports",
+        worker_count=1,
+    )

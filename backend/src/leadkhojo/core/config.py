@@ -32,6 +32,9 @@ class Settings(BaseSettings):
 
     # -- database ----------------------------------------------------------
     database_url: str = "postgresql+asyncpg://leadkhojo:leadkhojo@localhost:5432/leadkhojo"
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_echo: bool = False
 
     # -- server ------------------------------------------------------------
     # Bind to loopback by default. v1 has no authentication; an instance
@@ -57,6 +60,11 @@ class Settings(BaseSettings):
 
     # -- plugins -----------------------------------------------------------
     disabled_plugins: tuple[str, ...] = ()
+
+    # -- workers -----------------------------------------------------------
+    worker_count: int = 2
+    worker_poll_seconds: float = 1.0
+    job_stale_after_seconds: int = 900
 
     # -- opportunities -----------------------------------------------------
     # AI rewriting is OFF by default and may only ever rephrase text the rule
