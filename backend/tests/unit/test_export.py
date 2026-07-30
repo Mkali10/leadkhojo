@@ -103,10 +103,17 @@ def _result(
             ]
         },
         "cms": {"cms": {"name": "WordPress", "version": "5.4.2", "is_outdated": True}},
-        "ssl": {"certificate": {"not_after": "2026-08-08T00:00:00Z", "days_remaining": 9,
-                                "protocol": "TLSv1.3"}},
-        "headers": {"security_headers": {"strict-transport-security": "max-age=1"},
-                    "missing_headers": ["content-security-policy"]},
+        "ssl": {
+            "certificate": {
+                "not_after": "2026-08-08T00:00:00Z",
+                "days_remaining": 9,
+                "protocol": "TLSv1.3",
+            }
+        },
+        "headers": {
+            "security_headers": {"strict-transport-security": "max-age=1"},
+            "missing_headers": ["content-security-policy"],
+        },
         "dns": {"spf": "v=spf1 ~all", "dmarc": None, "dmarc_policy": None},
     }
     return BusinessResult(
@@ -176,7 +183,7 @@ def test_a_failed_business_still_exports_a_row() -> None:
 def test_formula_injection_is_neutralised(prefix: str) -> None:
     """A business name starting with = becomes an executable formula when
     the CSV is opened in Excel."""
-    payload = write_csv([_result(name=f"{prefix}HYPERLINK(\"http://evil\",\"click\")")])
+    payload = write_csv([_result(name=f'{prefix}HYPERLINK("http://evil","click")')])
     assert _rows(payload)[0]["business_name"].startswith("'")
 
 

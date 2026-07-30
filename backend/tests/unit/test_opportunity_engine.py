@@ -97,9 +97,7 @@ def test_an_unknown_condition_kind_is_rejected(tmp_path: Path) -> None:
 # ---------------------------------------------------------------- determinism
 
 
-def test_output_is_byte_identical_across_50_runs(
-    engine: OpportunityEngine, now: datetime
-) -> None:
+def test_output_is_byte_identical_across_50_runs(engine: OpportunityEngine, now: datetime) -> None:
     """FR-OPP-8. Deterministic is a property, not an intention."""
     runs = [
         engine.generate((EXPIRING, NO_DMARC), {}, now=now, domain="acme.com") for _ in range(50)
@@ -131,9 +129,7 @@ def test_a_finding_becomes_an_opportunity_carrying_its_evidence(
     assert opportunity.pitch_angle
 
 
-def test_the_description_states_the_specific_fact(
-    engine: OpportunityEngine, now: datetime
-) -> None:
+def test_the_description_states_the_specific_fact(engine: OpportunityEngine, now: datetime) -> None:
     """Generic text is a defect. The number must be in the sentence."""
     produced = engine.generate((EXPIRING,), {}, now=now, domain="acme.com")
     opportunity = next(o for o in produced if o.rule_id == "ssl_renewal")
@@ -153,9 +149,7 @@ def test_a_passing_finding_produces_no_opportunity(
 # ---------------------------------------------------------------- specificity gate
 
 
-def test_an_unfillable_template_produces_nothing(
-    engine: OpportunityEngine, now: datetime
-) -> None:
+def test_an_unfillable_template_produces_nothing(engine: OpportunityEngine, now: datetime) -> None:
     """The gate that decides whether users trust the whole report.
 
     TLS-04 failed, but the evidence has no days_remaining to put in the
@@ -205,7 +199,8 @@ def test_expired_supersedes_expiring(engine: OpportunityEngine, now: datetime) -
     also_expiring = _finding("TLS-04", {"days_remaining": 0, "not_after": "2026-07-25T00:00:00Z"})
 
     rule_ids = {
-        str(o.rule_id) for o in engine.generate((expired, also_expiring), {}, now=now, domain="acme.com")
+        str(o.rule_id)
+        for o in engine.generate((expired, also_expiring), {}, now=now, domain="acme.com")
     }
 
     assert "ssl_expired" in rule_ids
@@ -221,7 +216,9 @@ def test_a_rule_may_require_several_findings(engine: OpportunityEngine, now: dat
     slow = _finding("PERF-01", {"ttfb_ms": 3200, "threshold_ms": 1500})
     no_cdn = _finding("PERF-03", {"headers_checked": []})
 
-    with_both = {str(o.rule_id) for o in engine.generate((slow, no_cdn), {}, now=now, domain="acme.com")}
+    with_both = {
+        str(o.rule_id) for o in engine.generate((slow, no_cdn), {}, now=now, domain="acme.com")
+    }
     with_one = {str(o.rule_id) for o in engine.generate((slow,), {}, now=now, domain="acme.com")}
 
     assert "performance_no_cdn" in with_both

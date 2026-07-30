@@ -183,7 +183,9 @@ def test_confidence_drops_when_no_contacts_were_found() -> None:
 def test_urgent_opportunities_are_worth_more() -> None:
     critical = (_opportunity("a", Urgency.CRITICAL),)
     low = (_opportunity("a", Urgency.LOW),)
-    assert score_opportunity(critical, CONTACTABLE).total > score_opportunity(low, CONTACTABLE).total
+    assert (
+        score_opportunity(critical, CONTACTABLE).total > score_opportunity(low, CONTACTABLE).total
+    )
 
 
 def test_more_opportunities_score_higher() -> None:
