@@ -1,0 +1,179 @@
+# Frontend libraries, frameworks and analytics.
+
+- id: react
+  name: React
+  category: javascript
+  signals:
+    - type: html
+      pattern: 'react(?:-dom)?[.@-]([\d.]+)?[.\w]*\.js'
+      version_group: 1
+      confidence: likely
+    - type: html
+      pattern: 'data-reactroot|__NEXT_DATA__|_reactListening'
+      confidence: certain
+
+- id: nextjs
+  name: Next.js
+  category: framework
+  signals:
+    - type: html
+      pattern: '/_next/static/'
+      confidence: certain
+    - type: header
+      name: x-powered-by
+      pattern: 'Next\.js'
+      confidence: certain
+
+- id: vue
+  name: Vue.js
+  category: javascript
+  signals:
+    - type: html
+      pattern: 'vue(?:\.runtime)?[.@-]([\d.]+)?[.\w]*\.js'
+      version_group: 1
+      confidence: likely
+    - type: html
+      pattern: 'data-v-[0-9a-f]{8}'
+      confidence: certain
+
+- id: nuxt
+  name: Nuxt
+  category: framework
+  signals:
+    - type: html
+      pattern: '__NUXT__|/_nuxt/'
+      confidence: certain
+
+- id: angular
+  name: Angular
+  category: javascript
+  signals:
+    - type: html
+      pattern: 'ng-version="([\d.]+)"'
+      version_group: 1
+      confidence: certain
+    - type: html
+      pattern: 'ng-app|angular\.min\.js'
+      confidence: likely
+
+- id: svelte
+  name: Svelte
+  category: javascript
+  signals:
+    - type: html
+      pattern: 'svelte-[0-9a-z]{6}'
+      confidence: likely
+
+- id: jquery
+  name: jQuery
+  category: javascript
+  signals:
+    - type: html
+      pattern: 'jquery[.-]?([\d]+\.[\d]+(?:\.[\d]+)?)?(?:\.min)?\.js'
+      version_group: 1
+      confidence: certain
+
+- id: bootstrap
+  name: Bootstrap
+  category: javascript
+  signals:
+    - type: html
+      pattern: 'bootstrap[.-]?([\d]+\.[\d]+(?:\.[\d]+)?)?(?:\.min)?\.(?:js|css)'
+      version_group: 1
+      confidence: likely
+
+- id: tailwind
+  name: Tailwind CSS
+  category: javascript
+  signals:
+    - type: html
+      pattern: 'tailwind(?:css)?(?:\.min)?\.css|cdn\.tailwindcss\.com'
+      confidence: likely
+
+- id: google_analytics
+  name: Google Analytics
+  category: analytics
+  signals:
+    - type: html
+      pattern: 'google-analytics\.com/analytics\.js|gtag/js\?id=UA-'
+      confidence: certain
+
+- id: google_analytics_4
+  name: Google Analytics 4
+  category: analytics
+  signals:
+    - type: html
+      pattern: 'gtag/js\?id=G-[A-Z0-9]+'
+      confidence: certain
+
+- id: google_tag_manager
+  name: Google Tag Manager
+  category: analytics
+  signals:
+    - type: html
+      pattern: 'googletagmanager\.com/gtm\.js|GTM-[A-Z0-9]+'
+      confidence: certain
+
+- id: meta_pixel
+  name: Meta Pixel
+  category: analytics
+  signals:
+    - type: html
+      pattern: 'connect\.facebook\.net/[^/]+/fbevents\.js'
+      confidence: certain
+
+- id: hotjar
+  name: Hotjar
+  category: analytics
+  signals:
+    - type: html
+      pattern: 'static\.hotjar\.com'
+      confidence: certain
+
+- id: matomo
+  name: Matomo
+  category: analytics
+  signals:
+    - type: html
+      pattern: 'matomo\.js|piwik\.js'
+      confidence: certain
+
+- id: plausible
+  name: Plausible
+  category: analytics
+  signals:
+    - type: html
+      pattern: 'plausible\.io/js/'
+      confidence: certain
+
+- id: hubspot
+  name: HubSpot
+  category: marketing
+  signals:
+    - type: html
+      pattern: 'js\.hs-scripts\.com|js\.hsforms\.net'
+      confidence: certain
+
+- id: mailchimp
+  name: Mailchimp
+  category: marketing
+  signals:
+    - type: html
+      pattern: 'list-manage\.com|chimpstatic\.com'
+      confidence: certain
+
+- id: intercom
+  name: Intercom
+  category: marketing
+  signals:
+    - type: html
+      pattern: 'widget\.intercom\.io|intercomcdn\.com'
+      confidence: certain
+
+- id: zendesk
+  name: Zendesk
+  category: marketing
+  signals:
+    - type: html
+      pattern: 'static\.zdassets\.com|zendesk\.com/embeddable'
+      confidence: certain

@@ -1,0 +1,28 @@
+# Latest known release per technology, used for outdated detection.
+#
+# A technology absent from this map yields is_outdated = None, which the
+# specificity gate treats as "do not claim anything". That is deliberate:
+# a stale entry here would produce a false accusation, which costs more than
+# a missed opportunity.
+#
+# Review monthly. Last reviewed: 2026-07-30.
+
+wordpress: "6.7"
+drupal: "11.1"
+joomla: "5.2"
+typo3: "13.4"
+ghost: "5.101"
+magento: "2.4.7"
+prestashop: "8.2"
+opencart: "4.0.2"
+
+jquery: "3.7.1"
+bootstrap: "5.3.3"
+angular: "19.0.0"
+react: "19.0.0"
+vue: "3.5.13"
+
+php: "8.4"
+nginx: "1.27.3"
+apache: "2.4.62"
+aspnet: "9.0"

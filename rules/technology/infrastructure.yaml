@@ -1,0 +1,248 @@
+# Servers, CDNs, WAFs and hosting.
+
+- id: nginx
+  name: Nginx
+  category: server
+  signals:
+    - type: header
+      name: server
+      pattern: 'nginx(?:/([\d.]+))?'
+      version_group: 1
+      confidence: certain
+
+- id: apache
+  name: Apache
+  category: server
+  signals:
+    - type: header
+      name: server
+      pattern: 'Apache(?:/([\d.]+))?'
+      version_group: 1
+      confidence: certain
+
+- id: litespeed
+  name: LiteSpeed
+  category: server
+  signals:
+    - type: header
+      name: server
+      pattern: 'LiteSpeed'
+      confidence: certain
+
+- id: iis
+  name: Microsoft IIS
+  category: server
+  signals:
+    - type: header
+      name: server
+      pattern: 'Microsoft-IIS(?:/([\d.]+))?'
+      version_group: 1
+      confidence: certain
+
+- id: caddy
+  name: Caddy
+  category: server
+  signals:
+    - type: header
+      name: server
+      pattern: 'Caddy'
+      confidence: certain
+
+- id: cloudflare
+  name: Cloudflare
+  category: cdn
+  signals:
+    - type: header
+      name: cf-ray
+      pattern: '.'
+      confidence: certain
+    - type: header
+      name: server
+      pattern: 'cloudflare'
+      confidence: certain
+
+- id: cloudfront
+  name: Amazon CloudFront
+  category: cdn
+  signals:
+    - type: header
+      name: via
+      pattern: 'CloudFront'
+      confidence: certain
+    - type: header
+      name: x-amz-cf-id
+      pattern: '.'
+      confidence: certain
+
+- id: fastly
+  name: Fastly
+  category: cdn
+  signals:
+    - type: header
+      name: x-served-by
+      pattern: 'cache-'
+      confidence: likely
+    - type: header
+      name: x-fastly-request-id
+      pattern: '.'
+      confidence: certain
+
+- id: akamai
+  name: Akamai
+  category: cdn
+  signals:
+    - type: header
+      name: x-akamai-transformed
+      pattern: '.'
+      confidence: certain
+    - type: header
+      name: server
+      pattern: 'AkamaiGHost'
+      confidence: certain
+
+- id: sucuri
+  name: Sucuri
+  category: waf
+  signals:
+    - type: header
+      name: x-sucuri-id
+      pattern: '.'
+      confidence: certain
+
+- id: imperva
+  name: Imperva
+  category: waf
+  signals:
+    - type: header
+      name: x-iinfo
+      pattern: '.'
+      confidence: certain
+    - type: cookie
+      name: incap_ses
+      pattern: 'incap_ses'
+      confidence: certain
+
+- id: vercel
+  name: Vercel
+  category: hosting
+  signals:
+    - type: header
+      name: x-vercel-id
+      pattern: '.'
+      confidence: certain
+
+- id: netlify
+  name: Netlify
+  category: hosting
+  signals:
+    - type: header
+      name: x-nf-request-id
+      pattern: '.'
+      confidence: certain
+    - type: header
+      name: server
+      pattern: 'Netlify'
+      confidence: certain
+
+- id: github_pages
+  name: GitHub Pages
+  category: hosting
+  signals:
+    - type: header
+      name: server
+      pattern: 'GitHub\.com'
+      confidence: certain
+
+- id: aws_s3
+  name: Amazon S3
+  category: hosting
+  signals:
+    - type: header
+      name: server
+      pattern: 'AmazonS3'
+      confidence: certain
+
+- id: godaddy
+  name: GoDaddy
+  category: hosting
+  signals:
+    - type: header
+      name: server
+      pattern: 'DPS/'
+      confidence: likely
+
+- id: php
+  name: PHP
+  category: language
+  signals:
+    - type: header
+      name: x-powered-by
+      pattern: 'PHP(?:/([\d.]+))?'
+      version_group: 1
+      confidence: certain
+    - type: cookie
+      name: PHPSESSID
+      pattern: 'PHPSESSID'
+      confidence: certain
+
+- id: aspnet
+  name: ASP.NET
+  category: framework
+  signals:
+    - type: header
+      name: x-aspnet-version
+      pattern: '([\d.]+)'
+      version_group: 1
+      confidence: certain
+    - type: header
+      name: x-powered-by
+      pattern: 'ASP\.NET'
+      confidence: certain
+
+- id: express
+  name: Express
+  category: framework
+  signals:
+    - type: header
+      name: x-powered-by
+      pattern: 'Express'
+      confidence: certain
+
+- id: laravel
+  name: Laravel
+  category: framework
+  signals:
+    - type: cookie
+      name: laravel_session
+      pattern: 'laravel_session'
+      confidence: certain
+    - type: cookie
+      name: XSRF-TOKEN
+      pattern: 'XSRF-TOKEN'
+      confidence: possible
+
+- id: django
+  name: Django
+  category: framework
+  signals:
+    - type: cookie
+      name: csrftoken
+      pattern: 'csrftoken'
+      confidence: likely
+    - type: cookie
+      name: sessionid
+      pattern: '^sessionid$'
+      confidence: possible
+
+- id: rails
+  name: Ruby on Rails
+  category: framework
+  signals:
+    - type: header
+      name: x-powered-by
+      pattern: 'Phusion Passenger'
+      confidence: likely
+    - type: cookie
+      name: _session_id
+      pattern: '_session_id'
+      confidence: possible

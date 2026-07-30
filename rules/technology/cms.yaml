@@ -1,0 +1,150 @@
+# Content management systems.
+#
+# Adding a fingerprint here is a data change: no Python edit, no migration.
+# Every addition needs a fixture test AND a false-positive check across the
+# existing corpus — a wrong detection costs more trust than a missed one.
+
+- id: wordpress
+  name: WordPress
+  category: cms
+  website: https://wordpress.org
+  signals:
+    - type: meta_generator
+      pattern: 'WordPress\s*([\d.]+)?'
+      version_group: 1
+      confidence: certain
+    - type: html
+      pattern: '/wp-content/'
+      confidence: certain
+    - type: html
+      pattern: '/wp-includes/'
+      confidence: certain
+    - type: header
+      name: x-pingback
+      pattern: 'xmlrpc\.php'
+      confidence: likely
+
+- id: drupal
+  name: Drupal
+  category: cms
+  website: https://drupal.org
+  signals:
+    - type: meta_generator
+      pattern: 'Drupal\s*([\d.]+)?'
+      version_group: 1
+      confidence: certain
+    - type: html
+      pattern: '/sites/default/files/'
+      confidence: likely
+    - type: header
+      name: x-drupal-cache
+      pattern: '.'
+      confidence: certain
+    - type: header
+      name: x-generator
+      pattern: 'Drupal\s*([\d.]+)?'
+      version_group: 1
+      confidence: certain
+
+- id: joomla
+  name: Joomla
+  category: cms
+  website: https://joomla.org
+  signals:
+    - type: meta_generator
+      pattern: 'Joomla!?\s*([\d.]+)?'
+      version_group: 1
+      confidence: certain
+    - type: html
+      pattern: '/media/jui/'
+      confidence: likely
+    - type: html
+      pattern: 'option=com_content'
+      confidence: likely
+
+- id: wix
+  name: Wix
+  category: cms
+  website: https://wix.com
+  signals:
+    - type: html
+      pattern: 'static\.parastorage\.com'
+      confidence: certain
+    - type: meta_generator
+      pattern: 'Wix\.com'
+      confidence: certain
+    - type: header
+      name: x-wix-request-id
+      pattern: '.'
+      confidence: certain
+
+- id: squarespace
+  name: Squarespace
+  category: cms
+  website: https://squarespace.com
+  signals:
+    - type: html
+      pattern: 'static1\.squarespace\.com'
+      confidence: certain
+    - type: header
+      name: server
+      pattern: 'Squarespace'
+      confidence: certain
+
+- id: webflow
+  name: Webflow
+  category: cms
+  website: https://webflow.com
+  signals:
+    - type: meta_generator
+      pattern: 'Webflow'
+      confidence: certain
+    - type: html
+      pattern: 'assets\.website-files\.com'
+      confidence: certain
+
+- id: ghost
+  name: Ghost
+  category: cms
+  website: https://ghost.org
+  signals:
+    - type: meta_generator
+      pattern: 'Ghost\s*([\d.]+)?'
+      version_group: 1
+      confidence: certain
+    - type: html
+      pattern: '/assets/built/'
+      confidence: possible
+
+- id: typo3
+  name: TYPO3
+  category: cms
+  signals:
+    - type: meta_generator
+      pattern: 'TYPO3\s*([\d.]+)?'
+      version_group: 1
+      confidence: certain
+    - type: html
+      pattern: '/typo3conf/'
+      confidence: certain
+
+- id: contentful
+  name: Contentful
+  category: cms
+  signals:
+    - type: html
+      pattern: 'images\.ctfassets\.net'
+      confidence: likely
+
+- id: craft_cms
+  name: Craft CMS
+  category: cms
+  signals:
+    - type: header
+      name: x-powered-by
+      pattern: 'Craft CMS'
+      confidence: certain
+    - type: cookie
+      name: CraftSessionId
+      pattern: 'CraftSessionId'
+      confidence: certain

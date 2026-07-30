@@ -1,0 +1,86 @@
+- id: woocommerce
+  name: WooCommerce
+  category: ecommerce
+  website: https://woocommerce.com
+  signals:
+    - type: html
+      pattern: '/plugins/woocommerce/'
+      confidence: certain
+    - type: html
+      pattern: 'woocommerce-page|wc-block'
+      confidence: likely
+    - type: meta_generator
+      pattern: 'WooCommerce\s*([\d.]+)?'
+      version_group: 1
+      confidence: certain
+
+- id: shopify
+  name: Shopify
+  category: ecommerce
+  website: https://shopify.com
+  signals:
+    - type: html
+      pattern: 'cdn\.shopify\.com'
+      confidence: certain
+    - type: header
+      name: x-shopify-stage
+      pattern: '.'
+      confidence: certain
+    - type: html
+      pattern: 'Shopify\.theme'
+      confidence: certain
+
+- id: magento
+  name: Magento
+  category: ecommerce
+  signals:
+    - type: html
+      pattern: '/static/version\d+/frontend/'
+      confidence: certain
+    - type: cookie
+      name: X-Magento-Vary
+      pattern: 'X-Magento-Vary'
+      confidence: certain
+    - type: html
+      pattern: 'Mage\.Cookies'
+      confidence: likely
+
+- id: prestashop
+  name: PrestaShop
+  category: ecommerce
+  signals:
+    - type: meta_generator
+      pattern: 'PrestaShop'
+      confidence: certain
+    - type: cookie
+      name: PrestaShop
+      pattern: 'PrestaShop'
+      confidence: certain
+
+- id: bigcommerce
+  name: BigCommerce
+  category: ecommerce
+  signals:
+    - type: html
+      pattern: 'cdn\d*\.bigcommerce\.com'
+      confidence: certain
+
+- id: opencart
+  name: OpenCart
+  category: ecommerce
+  signals:
+    - type: html
+      pattern: 'index\.php\?route=common/home'
+      confidence: likely
+    - type: cookie
+      name: OCSESSID
+      pattern: 'OCSESSID'
+      confidence: certain
+
+- id: squarespace_commerce
+  name: Squarespace Commerce
+  category: ecommerce
+  signals:
+    - type: html
+      pattern: 'squarespace-commerce'
+      confidence: likely
