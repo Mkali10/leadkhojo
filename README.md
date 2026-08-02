@@ -132,14 +132,48 @@ Not preferences. Violating any of these is a revert, not a discussion.
 
 ---
 
-## Quick start (once built)
+## Quick start
 
 ```bash
-cp .env.example .env      # set LK_DATABASE_URL and any discovery API key
-make dev                  # Postgres + API + web, seeded
-make scan KEYWORD="dental clinics" LOCATION="Austin, TX"
+make install              # virtualenv + dependencies
+cp .env.example .env      # every setting is listed there, with its default
 ```
+
+**Scan from the command line** — no database, no server:
+
+```bash
+make scan URL=acme.com
+make scan CSV=domains.csv          # writes CSV + PDF into ./results
+```
+
+**Or run the API:**
+
+```bash
+make db                   # PostgreSQL via docker compose
+make migrate              # apply migrations
+make api                  # http://127.0.0.1:8000/docs
+```
+
+Then, against a running server:
+
+```bash
+curl -X POST localhost:8000/api/v1/scans \
+     -H 'content-type: application/json' \
+     -d '{"urls": ["acme.com"]}'                     # → 202 + a scan id
+
+curl localhost:8000/api/v1/scans/$ID/progress        # poll until terminal
+curl localhost:8000/api/v1/scans/$ID/businesses      # results
+curl -OJ localhost:8000/api/v1/exports/scans/$ID/csv
+```
+
+Interactive documentation is at `/docs`, the schema at `/openapi.json`.
+
+> **The server has no authentication.** It binds to loopback and warns loudly
+> if you change that. Do not expose an instance to the internet: anyone who
+> can reach it can run scans that appear to originate from your IP address.
 
 ## Repository status
 
-**Documentation phase.** No application code written yet. Awaiting approval of the documents above before implementation begins.
+**Phase 2 complete.** The engine, the plugin set, the exporters, the CLI, the
+persistence layer, the job runner and the REST API are implemented and tested
+(377 tests). Next: the React UI, which consumes only the REST API.

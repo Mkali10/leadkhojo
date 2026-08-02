@@ -69,7 +69,7 @@ There is none in v1. Do not expose this instance to the internet.
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings: Settings = get_settings()
+    settings: Settings = app.state.settings
     configure_logging(level=settings.log_level, json_output=settings.log_json)
 
     if settings.binds_publicly:
@@ -117,11 +117,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json",
         contact={"name": "LeadKhojo", "url": "https://leadkhojo.com/bot"},
     )
+    # Read by the lifespan and by get_app_settings, so a test can hand the
+    # app its own configuration instead of the process-wide one.
+    app.state.settings = resolved
 
     # The SPA is served from a different origin in development.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_origins=list(resolved.cors_origins),
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -135,7 +138,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         prefix = "" if router is health_router else "/api/v1"
         app.include_router(router, prefix=prefix)
 
-    _ = resolved  # settings are read via get_settings() inside the lifespan
     return app
 
 

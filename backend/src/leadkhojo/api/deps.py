@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from leadkhojo.api.service import ScanService
@@ -53,15 +53,26 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 
-def get_app_settings() -> Settings:
-    return get_settings()
+def get_app_settings(request: Request) -> Settings:
+    """The configuration this app was built with, not the global one.
+
+    They are the same in production. They differ in tests, which is the
+    point: nothing here reads configuration the caller cannot control.
+    """
+    settings: Settings | None = getattr(request.app.state, "settings", None)
+    return settings or get_settings()
 
 
-async def get_scan_service(session: SessionDep) -> ScanService:
-    return ScanService(session, PostgresJobQueue(session))
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
+
+
+async def get_scan_service(session: SessionDep, settings: SettingsDep) -> ScanService:
+    return ScanService(session, PostgresJobQueue(session), settings)
 
 
 __all__ = [
+    "SessionDep",
+    "SettingsDep",
     "get_app_settings",
     "get_db_session",
     "get_plugin_engine",

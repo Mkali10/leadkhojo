@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from leadkhojo import __version__
 from leadkhojo.api import schemas
 from leadkhojo.api.deps import (
+    SettingsDep,
     get_db_session,
     get_plugin_engine,
     get_scan_service,
@@ -27,7 +28,7 @@ from leadkhojo.api.deps import (
 from leadkhojo.api.service import ScanService
 from leadkhojo.core.errors import InvalidCsvError, NotFoundError
 from leadkhojo.db.repository import ScanRepository
-from leadkhojo.discovery.providers import MAX_BYTES, CsvImportProvider
+from leadkhojo.discovery.providers import MAX_BYTES, MAX_ROWS, CsvImportProvider
 from leadkhojo.export.csv_writer import write_csv
 from leadkhojo.export.pdf_report import build_business_report, build_scan_summary
 from leadkhojo.plugins.engine import PluginEngine
@@ -116,7 +117,7 @@ async def create_scan(
 async def create_scan_from_csv(
     service: ServiceDep,
     file: Annotated[UploadFile, File(description="CSV with a domain or website column")],
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = MAX_ROWS,
 ) -> schemas.ScanSummary:
     raw = await file.read()
     if len(raw) > MAX_BYTES:
@@ -139,7 +140,7 @@ async def create_scan_from_csv(
 @scans_router.post("/csv/validate", summary="Dry-run a CSV upload")
 async def validate_csv(
     file: Annotated[UploadFile, File()],
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = MAX_ROWS,
 ) -> dict[str, object]:
     """Report what an upload would produce, without creating anything.
 
@@ -263,13 +264,15 @@ async def get_business(business_id: uuid.UUID, service: ServiceDep) -> schemas.B
 
 
 @exports_router.get("/scans/{scan_id}/csv", summary="Export results as CSV")
-async def export_scan_csv(scan_id: uuid.UUID, session: SessionDep) -> Response:
+async def export_scan_csv(
+    scan_id: uuid.UUID, session: SessionDep, settings: SettingsDep
+) -> Response:
     repo = ScanRepository(session)
     scan = await repo.get_scan(scan_id)
     if scan is None:
         raise NotFoundError(f"No scan with id {scan_id}.")
 
-    results = await _load_results(repo, scan_id)
+    results = await _load_results(repo, scan_id, settings.max_businesses_per_scan)
     payload = write_csv(results)
     filename = _filename(scan, "csv")
 
@@ -289,13 +292,15 @@ async def export_scan_csv(scan_id: uuid.UUID, session: SessionDep) -> Response:
 
 
 @exports_router.get("/scans/{scan_id}/pdf", summary="Export a scan summary PDF")
-async def export_scan_pdf(scan_id: uuid.UUID, session: SessionDep) -> Response:
+async def export_scan_pdf(
+    scan_id: uuid.UUID, session: SessionDep, settings: SettingsDep
+) -> Response:
     repo = ScanRepository(session)
     scan = await repo.get_scan(scan_id)
     if scan is None:
         raise NotFoundError(f"No scan with id {scan_id}.")
 
-    results = await _load_results(repo, scan_id)
+    results = await _load_results(repo, scan_id, settings.max_businesses_per_scan)
     title = scan.keyword or "Scan summary"
     payload = build_scan_summary(results, title=title)
     filename = _filename(scan, "pdf")
@@ -371,8 +376,8 @@ async def list_plugins(
 # ================================================================ helpers
 
 
-async def _load_results(repo: ScanRepository, scan_id: uuid.UUID) -> list[object]:
-    businesses = await repo.list_businesses(scan_id, status="all", limit=500)
+async def _load_results(repo: ScanRepository, scan_id: uuid.UUID, limit: int) -> list[object]:
+    businesses = await repo.list_businesses(scan_id, status="all", limit=limit)
     return [await _to_business_result(repo, b) for b in businesses]
 
 

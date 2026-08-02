@@ -9,9 +9,20 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# A list setting written the way a human writes it in a .env file:
+#
+#     LK_DISABLED_PLUGINS=performance,cms
+#
+# NoDecode is required. Without it pydantic-settings runs json.loads on the
+# raw value before any validator sees it, so the spelling above raises a
+# SettingsError at startup and the only accepted form is JSON — which nobody
+# types into an env file.
+CommaList = Annotated[tuple[str, ...], NoDecode]
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -42,6 +53,14 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
 
+    # Origins allowed to call the API from a browser. The Vite dev server by
+    # default; a deployment serving the built UI from the same origin needs
+    # none of these.
+    cors_origins: CommaList = (
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    )
+
     # -- crawler -----------------------------------------------------------
     user_agent: str = "LeadKhojoBot/1.0 (+https://leadkhojo.com/bot)"
     max_pages_per_site: int = 8
@@ -59,7 +78,7 @@ class Settings(BaseSettings):
     rules_dir: Path = _REPO_ROOT / "rules"
 
     # -- plugins -----------------------------------------------------------
-    disabled_plugins: tuple[str, ...] = ()
+    disabled_plugins: CommaList = ()
 
     # -- workers -----------------------------------------------------------
     worker_count: int = 2
@@ -80,10 +99,23 @@ class Settings(BaseSettings):
     # -- export ------------------------------------------------------------
     export_dir: Path = Field(default_factory=lambda: Path.cwd() / "exports")
 
+    # The ceiling on how many businesses one scan holds, and therefore how
+    # many rows an export or a re-run will touch in a single pass. Raising it
+    # raises peak memory during PDF generation, which builds the whole
+    # document before writing a byte.
+    max_businesses_per_scan: int = 500
+
     @field_validator("log_level")
     @classmethod
     def _upper(cls, v: str) -> str:
         return v.upper()
+
+    @field_validator("cors_origins", "disabled_plugins", mode="before")
+    @classmethod
+    def _split_list(cls, v: object) -> object:
+        if isinstance(v, str):
+            return tuple(part.strip() for part in v.split(",") if part.strip())
+        return v
 
     @property
     def binds_publicly(self) -> bool:

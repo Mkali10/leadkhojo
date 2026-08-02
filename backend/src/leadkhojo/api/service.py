@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from leadkhojo.api import schemas
+from leadkhojo.core.config import Settings
 from leadkhojo.core.errors import ConflictError, NotFoundError, ValidationError
 from leadkhojo.core.utils.clock import utcnow
 from leadkhojo.db.models import Business, Scan
@@ -22,10 +23,11 @@ from leadkhojo.jobs.queue import JobQueue, JobType
 
 
 class ScanService:
-    def __init__(self, session: AsyncSession, queue: JobQueue) -> None:
+    def __init__(self, session: AsyncSession, queue: JobQueue, settings: Settings) -> None:
         self._session = session
         self._repo = ScanRepository(session)
         self._queue = queue
+        self._settings = settings
 
     # -- creating ----------------------------------------------------------
 
@@ -75,7 +77,9 @@ class ScanService:
                 meta={"scan_id": str(scan_id), "status": original.status},
             )
 
-        businesses = await self._repo.list_businesses(scan_id, status="all", limit=500)
+        businesses = await self._repo.list_businesses(
+            scan_id, status="all", limit=self._settings.max_businesses_per_scan
+        )
         urls = [b.website_url for b in businesses if b.website_url]
         if not urls:
             raise ConflictError(

@@ -1,0 +1,65 @@
+# Local development stack.
+#
+#   docker compose up -d db          just PostgreSQL, API on the host
+#   docker compose --profile api up  everything in containers
+#
+# There is no authentication in v1, so nothing here publishes a port on
+# anything but loopback. Changing 127.0.0.1 to 0.0.0.0 below would let anyone
+# on your network run scans that appear to come from your IP address.
+
+name: leadkhojo
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-leadkhojo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leadkhojo}
+      POSTGRES_DB: ${POSTGRES_DB:-leadkhojo}
+      # Deterministic collation, so ORDER BY does not depend on the host.
+      POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-US"
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # The API waits on this. Without it, the first migration races initdb.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leadkhojo} -d ${POSTGRES_DB:-leadkhojo}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  api:
+    profiles: ["api"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # `db`, not localhost: inside the network the host is the service name.
+      LK_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-leadkhojo}:${POSTGRES_PASSWORD:-leadkhojo}@db:5432/${POSTGRES_DB:-leadkhojo}
+      # Binds to all interfaces *inside the container only*; the published
+      # port above is still loopback-only on the host.
+      LK_HOST: 0.0.0.0
+      LK_PORT: 8000
+      LK_LOG_JSON: "true"
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "127.0.0.1:${LK_PORT:-8000}:8000"
+    volumes:
+      # Rule packs are data, not code. Editing a fingerprint should not need
+      # an image rebuild.
+      - ./rules:/app/rules:ro
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn leadkhojo.api.app:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  pgdata:
