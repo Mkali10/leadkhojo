@@ -100,7 +100,7 @@ If you break this rule and put a network call inside an analyzer, you lose all f
 | Backend | Python 3.12 · FastAPI · SQLAlchemy 2.0 (async) · Pydantic v2 |
 | Crawler | httpx (fast path) → Playwright (JS fallback) · BeautifulSoup |
 | Database | PostgreSQL 16 |
-| Frontend | React 19 · TypeScript · Vite · Tailwind CSS |
+| Frontend | React 19 · TypeScript · Vite · Tailwind CSS · TanStack Query |
 | Reports | ReportLab (PDF) · Python `csv` (CSV) |
 | Jobs | Postgres-backed queue + in-process async workers *(Redis/Celery: v2)* |
 | Deploy | Docker · Docker Compose · cloud-agnostic |
@@ -146,12 +146,16 @@ make scan URL=acme.com
 make scan CSV=domains.csv          # writes CSV + PDF into ./results
 ```
 
-**Or run the API:**
+**Or run the full application:**
 
 ```bash
 make db                   # PostgreSQL via docker compose
 make migrate              # apply migrations
 make api                  # http://127.0.0.1:8000/docs
+
+# in a second terminal
+make web-install          # once
+make web                  # http://127.0.0.1:5173
 ```
 
 Then, against a running server:
@@ -185,4 +189,9 @@ endpoint exercised, CSV and PDF downloaded, and every table inspected. Four
 runtime bugs surfaced that way and were fixed — none of them were visible to
 the test suite. See the `fix(...)` commits.
 
-Next: the React UI, which consumes only the REST API.
+The React UI is built and verified in a browser against the running API —
+dashboard, scan creation, live progress, results, business detail, comparison
+and CSV/PDF download. It consumes the REST API and nothing else.
+
+See [frontend/README.md](frontend/README.md) for how it is put together and
+which of the product's guarantees the interface is responsible for holding.

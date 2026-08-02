@@ -1,4 +1,4 @@
-.PHONY: help install db db-stop migrate revision api dev scan test lint format check plugins rules clean
+.PHONY: help install web-install db db-stop migrate revision api web dev scan test lint format check web-check plugins rules clean
 
 PY := backend/.venv/Scripts/python.exe
 ifeq ($(OS),)
@@ -19,7 +19,11 @@ help:
 	@echo "  make db         Start PostgreSQL (docker compose)"
 	@echo "  make migrate    Apply migrations"
 	@echo "  make api        Run the API at http://127.0.0.1:8000/docs"
+	@echo "  make web        Run the UI at http://127.0.0.1:5173 (needs the API)"
 	@echo "  make dev        db + migrate + api"
+	@echo ""
+	@echo "  make web-install  Install frontend dependencies"
+	@echo "  make web-check    Frontend typecheck, lint and build"
 	@echo ""
 	@echo "  make scan URL=acme.com"
 	@echo "  make scan CSV=domains.csv"
@@ -29,6 +33,9 @@ install:
 	$(PY) -m pip install --upgrade pip
 	cd backend && ../$(PY) -m pip install -e ".[dev]"
 	@echo "Ready. Try: make plugins"
+
+web-install:
+	cd frontend && npm install
 
 # ---------------------------------------------------------------- running
 
@@ -51,6 +58,15 @@ revision:
 api:
 	cd backend && ../$(PY) -m uvicorn leadkhojo.api.app:app \
 		--host 127.0.0.1 --port 8000 --reload --reload-dir src
+
+# The UI proxies /api to the backend, so the API must be running first.
+web:
+	cd frontend && npm run dev
+
+web-check:
+	cd frontend && npm run typecheck
+	cd frontend && npm run lint
+	cd frontend && npm run build
 
 dev: db migrate api
 
