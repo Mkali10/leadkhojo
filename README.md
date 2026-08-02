@@ -174,6 +174,15 @@ Interactive documentation is at `/docs`, the schema at `/openapi.json`.
 
 ## Repository status
 
-**Phase 2 complete.** The engine, the plugin set, the exporters, the CLI, the
-persistence layer, the job runner and the REST API are implemented and tested
-(377 tests). Next: the React UI, which consumes only the REST API.
+**Phase 2 complete and verified end to end.** The engine, the plugin set, the
+exporters, the CLI, the persistence layer, the job runner and the REST API are
+implemented and tested — 396 tests, passing against both SQLite and a real
+PostgreSQL 16.
+
+Verified by running it, not only by testing it: migrations applied to an empty
+PostgreSQL, the server booted, live scans crawled real public websites, every
+endpoint exercised, CSV and PDF downloaded, and every table inspected. Four
+runtime bugs surfaced that way and were fixed — none of them were visible to
+the test suite. See the `fix(...)` commits.
+
+Next: the React UI, which consumes only the REST API.
