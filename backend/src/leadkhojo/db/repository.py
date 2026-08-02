@@ -232,7 +232,12 @@ class ScanRepository:
         business.primary_phone = result.artifact("contacts", "primary_phone")
         business.contacts = list(contacts)
         business.technologies = list(result.artifact("technologies", "technologies", []) or [])
-        business.artifacts = _json_safe(result.artifacts)
+        artifacts = _json_safe(result.artifacts)
+        # Precompute severity counts so the results list can render them
+        # without eager-loading findings — a 100-row page would otherwise
+        # fan out into 100 extra queries.
+        artifacts["_finding_counts"] = _severity_counts(result)
+        business.artifacts = artifacts
         business.duration_ms = result.duration_ms
         business.analyzed_at = utcnow()
 
@@ -392,6 +397,17 @@ def _snapshot_record(business_id: uuid.UUID, snapshot: SiteSnapshot) -> SiteSnap
         duration_ms=snapshot.duration_ms,
         captured_at=snapshot.captured_at,
     )
+
+
+def _severity_counts(result: BusinessResult) -> dict[str, int]:
+    """Failing findings by severity. Passing checks are not problems."""
+    counts: dict[str, int] = {}
+    for finding in result.findings:
+        if not finding.is_problem:
+            continue
+        key = finding.severity.value
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def _json_safe(value: Any) -> Any:

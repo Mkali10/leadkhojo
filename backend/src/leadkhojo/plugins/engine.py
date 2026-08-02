@@ -135,6 +135,15 @@ class PluginEngine:
     def plugin_ids(self) -> tuple[str, ...]:
         return tuple(p.meta.id for p in self._plugins)
 
+    @property
+    def plugins(self) -> tuple[Plugin, ...]:
+        """The enabled plugin set, in execution order.
+
+        Exposed so the API can describe itself without re-loading every rule
+        pack on each request.
+        """
+        return self._plugins
+
     def run(self, snapshot: SiteSnapshot, *, now: datetime) -> EngineReport:
         ctx = PluginContext(snapshot=snapshot, now=now, settings=self._settings)
 
