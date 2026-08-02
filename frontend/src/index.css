@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/* Tailwind v4 is configured in CSS. One restrained palette: this is a tool
+   people read numbers off all day, so colour is reserved for meaning
+   (severity, urgency, deltas) and never used for decoration. */
+@theme {
+  --color-ink-50: #f6f7f9;
+  --color-ink-100: #eceef2;
+  --color-ink-200: #d5d9e2;
+  --color-ink-300: #b0b8c8;
+  --color-ink-400: #8590a7;
+  --color-ink-500: #66728c;
+  --color-ink-600: #515b73;
+  --color-ink-700: #424a5e;
+  --color-ink-800: #394050;
+  --color-ink-900: #1e2230;
+  --color-ink-950: #14161f;
+
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dae6ff;
+  --color-brand-200: #bdd3ff;
+  --color-brand-400: #6693f8;
+  --color-brand-500: #3f6de8;
+  --color-brand-600: #2a51cf;
+  --color-brand-700: #2340a6;
+
+  --color-critical: #c1362c;
+  --color-high: #c4642b;
+  --color-medium: #a5852b;
+  --color-low: #4d7c9a;
+  --color-good: #2f7a52;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-ink-50 text-ink-900 antialiased;
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+      sans-serif;
+  }
+
+  /* Tabular figures everywhere a number is compared down a column. Without
+     this, scores in a table jitter and are genuinely harder to scan. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+
+  /* Respect the user's motion preference rather than assuming animation is
+     always welcome. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-ink-200 bg-white shadow-sm;
+  }
+
+  .label {
+    @apply text-xs font-medium tracking-wide text-ink-500 uppercase;
+  }
+
+  /* Wide content scrolls inside its own container so the page body never
+     scrolls sideways on a phone. */
+  .scroll-x {
+    @apply overflow-x-auto;
+    scrollbar-width: thin;
+  }
+}
