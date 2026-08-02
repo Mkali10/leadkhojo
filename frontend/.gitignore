@@ -4,6 +4,9 @@ dist-ssr
 *.local
 .vite
 
+# tsc incremental caches
+*.tsbuildinfo
+
 # Smoke-test artefacts
 e2e/screenshots
 
