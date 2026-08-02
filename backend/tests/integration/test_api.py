@@ -1,127 +1,21 @@
 """API tests.
 
 Exercised through the real ASGI app, a real database and the real job queue.
-The only thing replaced is the crawler: the network is the one dependency a
-test suite must never have, and stubbing it here is legitimate precisely
-because the crawler is the sole component that touches it.
-
-Workers are driven explicitly with `drain()` rather than left polling in the
-background, so every assertion runs against a settled state instead of racing
-a poll interval.
+The only thing replaced is the crawler (see conftest): the network is the one
+dependency a test suite must never have, and stubbing it there is legitimate
+precisely because the crawler is the sole component that touches it.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from httpx import AsyncClient
 
-from leadkhojo.api import deps
-from leadkhojo.api.app import create_app
-from leadkhojo.core.types import Domain, SnapshotStatus, Url
-from leadkhojo.crawler.snapshot import SiteSnapshot
-from leadkhojo.jobs.worker import WorkerPool
-from leadkhojo.plugins.registry import build_engine
-from tests.conftest import FIXED_NOW, make_page, make_tls
+from tests.integration.conftest import API, drain, rows, run_scan, start_scan
 
 pytestmark = pytest.mark.asyncio
-
-API = "/api/v1"
-
-# A page with a real contact on it, and one without. The second is what
-# proves the no-synthesis rule survives to the wire: no info@ fallback.
-_WITH_CONTACT = """
-<html><body>
-  <h1>Acme Dental</h1>
-  <a href="mailto:hello@{domain}">Email us</a>
-</body></html>
-"""
-_WITHOUT_CONTACT = "<html><body><h1>Quiet Co</h1><p>No way to reach us.</p></body></html>"
-
-
-class _StubCrawler:
-    """Stands in for CrawlerService. Same shape, no sockets."""
-
-    def __init__(self, settings: object) -> None:
-        self._settings = settings
-
-    async def crawl(self, url: str, *, now: object = None) -> SiteSnapshot:
-        domain = url.replace("https://", "").replace("http://", "").strip("/")
-        html = (
-            _WITHOUT_CONTACT
-            if domain.startswith("nocontact")
-            else _WITH_CONTACT.format(domain=domain)
-        )
-        return SiteSnapshot(
-            domain=Domain(domain),
-            requested_url=Url(url),
-            final_url=Url(url),
-            status=SnapshotStatus.COMPLETE,
-            captured_at=FIXED_NOW,
-            http_status=200,
-            pages=(make_page(url, html=html),),
-            # A certificate close to expiry, so the run produces findings and
-            # opportunities rather than an empty happy path.
-            tls=make_tls(days_until_expiry=9),
-        )
-
-
-@pytest_asyncio.fixture
-async def client(engine, test_settings, rules_dir, monkeypatch) -> AsyncIterator[AsyncClient]:  # type: ignore[no-untyped-def]
-    from leadkhojo.jobs import handlers
-
-    monkeypatch.setattr(handlers, "CrawlerService", _StubCrawler)
-
-    factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
-    plugin_engine = build_engine(rules_dir)
-    deps.set_plugin_engine(plugin_engine)
-    deps.set_worker_pool(
-        WorkerPool(settings=test_settings, sessionmaker=factory, engine=plugin_engine)
-    )
-
-    async def _override() -> AsyncIterator[AsyncSession]:
-        async with factory() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-
-    # ASGITransport does not run the lifespan, so nothing here fights the
-    # singletons set above.
-    app = create_app(test_settings)
-    app.dependency_overrides[deps.get_db_session] = _override
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http:
-        yield http
-
-    deps.set_plugin_engine(None)
-    deps.set_worker_pool(None)
-
-
-async def _drain(budget_seconds: float = 30.0) -> int:
-    pool = deps.get_worker_pool()
-    assert pool is not None
-    return await pool.drain(timeout=budget_seconds)
-
-
-async def _scan_from_csv(client: AsyncClient, csv: str = "domain\nacme.com\n") -> str:
-    files = {"file": ("domains.csv", csv.encode(), "text/csv")}
-    response = await client.post(f"{API}/scans/csv", files=files)
-    assert response.status_code == 202, response.text
-    return str(response.json()["id"])
-
-
-async def _completed_scan(client: AsyncClient, csv: str = "domain\nacme.com\n") -> str:
-    scan_id = await _scan_from_csv(client, csv)
-    await _drain()
-    return scan_id
 
 
 # ================================================================ health
@@ -232,7 +126,7 @@ async def test_progress_is_pollable_immediately(client: AsyncClient) -> None:
 
 
 async def test_progress_reaches_100_when_the_scan_finishes(client: AsyncClient) -> None:
-    scan_id = await _completed_scan(client, "domain\na.com\nb.com\n")
+    scan_id = await run_scan(client, "domain\na.com\nb.com\n")
 
     payload = (await client.get(f"{API}/scans/{scan_id}/progress")).json()
 
@@ -280,10 +174,10 @@ async def test_a_scan_can_be_cancelled(client: AsyncClient) -> None:
 
 async def test_cancelling_drops_the_queued_work(client: AsyncClient) -> None:
     """A cancel that leaves jobs running is not a cancel."""
-    scan_id = await _scan_from_csv(client, "domain\na.com\nb.com\n")
+    scan_id = await start_scan(client, "domain\na.com\nb.com\n")
     await client.post(f"{API}/scans/{scan_id}/cancel")
 
-    assert await _drain() == 0
+    assert await drain() == 0
 
 
 async def test_cancelling_a_finished_scan_conflicts(client: AsyncClient) -> None:
@@ -297,7 +191,7 @@ async def test_cancelling_a_finished_scan_conflicts(client: AsyncClient) -> None
 
 
 async def test_deleting_a_scan_removes_it(client: AsyncClient) -> None:
-    scan_id = await _completed_scan(client)
+    scan_id = await run_scan(client)
 
     assert (await client.delete(f"{API}/scans/{scan_id}")).status_code == 204
     assert (await client.get(f"{API}/scans/{scan_id}")).status_code == 404
@@ -350,7 +244,7 @@ async def test_csv_validation_reports_without_creating_anything(
 
 
 async def test_results_are_listed_once_a_scan_runs(client: AsyncClient) -> None:
-    scan_id = await _completed_scan(client)
+    scan_id = await run_scan(client)
 
     response = await client.get(f"{API}/scans/{scan_id}/businesses")
 
@@ -364,9 +258,9 @@ async def test_a_result_row_carries_everything_the_table_needs(
     client: AsyncClient,
 ) -> None:
     """The table renders from this alone — no follow-up request per row."""
-    scan_id = await _completed_scan(client)
+    scan_id = await run_scan(client)
 
-    row = (await client.get(f"{API}/scans/{scan_id}/businesses")).json()["data"][0]
+    row = (await rows(client, scan_id))[0]
 
     for field in (
         "scores",
@@ -384,9 +278,9 @@ async def test_a_result_row_carries_everything_the_table_needs(
 async def test_a_contact_found_on_the_site_reaches_the_wire(
     client: AsyncClient,
 ) -> None:
-    scan_id = await _completed_scan(client)
+    scan_id = await run_scan(client)
 
-    row = (await client.get(f"{API}/scans/{scan_id}/businesses")).json()["data"][0]
+    row = (await rows(client, scan_id))[0]
 
     assert row["primary_email"] == "hello@acme.com"
 
@@ -396,9 +290,9 @@ async def test_a_business_with_no_contact_returns_null_not_a_guess(
 ) -> None:
     """The no-synthesis rule holds all the way out to the client: no
     info@domain fallback, ever."""
-    scan_id = await _completed_scan(client, "domain\nnocontact.com\n")
+    scan_id = await run_scan(client, "domain\nnocontact.com\n")
 
-    row = (await client.get(f"{API}/scans/{scan_id}/businesses")).json()["data"][0]
+    row = (await rows(client, scan_id))[0]
 
     assert row["primary_email"] is None
     assert "info@nocontact.com" not in str(row)
@@ -407,7 +301,7 @@ async def test_a_business_with_no_contact_returns_null_not_a_guess(
 async def test_results_can_be_filtered_to_businesses_with_a_contact(
     client: AsyncClient,
 ) -> None:
-    scan_id = await _completed_scan(client, "domain\nacme.com\nnocontact.com\n")
+    scan_id = await run_scan(client, "domain\nacme.com\nnocontact.com\n")
 
     with_contact = await client.get(f"{API}/scans/{scan_id}/businesses?has_contact=true")
     without = await client.get(f"{API}/scans/{scan_id}/businesses?has_contact=false")
@@ -417,7 +311,7 @@ async def test_results_can_be_filtered_to_businesses_with_a_contact(
 
 
 async def test_results_are_paginated(client: AsyncClient) -> None:
-    scan_id = await _completed_scan(client, "domain\na.com\nb.com\nc.com\n")
+    scan_id = await run_scan(client, "domain\na.com\nb.com\nc.com\n")
 
     body = (await client.get(f"{API}/scans/{scan_id}/businesses?limit=2")).json()
 
@@ -428,8 +322,8 @@ async def test_results_are_paginated(client: AsyncClient) -> None:
 async def test_business_detail_returns_findings_and_opportunities(
     client: AsyncClient,
 ) -> None:
-    scan_id = await _completed_scan(client)
-    business_id = (await client.get(f"{API}/scans/{scan_id}/businesses")).json()["data"][0]["id"]
+    scan_id = await run_scan(client)
+    business_id = (await rows(client, scan_id))[0]["id"]
 
     response = await client.get(f"{API}/businesses/{business_id}")
 
@@ -444,8 +338,8 @@ async def test_business_detail_returns_findings_and_opportunities(
 async def test_every_finding_carries_evidence(client: AsyncClient) -> None:
     """The rule the whole product rests on. An unevidenced claim made to a
     prospect is worse than saying nothing."""
-    scan_id = await _completed_scan(client)
-    business_id = (await client.get(f"{API}/scans/{scan_id}/businesses")).json()["data"][0]["id"]
+    scan_id = await run_scan(client)
+    business_id = (await rows(client, scan_id))[0]["id"]
 
     detail = (await client.get(f"{API}/businesses/{business_id}")).json()
 
@@ -459,8 +353,8 @@ async def test_the_deterministic_description_is_never_replaced_by_ai(
 ) -> None:
     """`description` is the rule engine's output and the source of truth;
     any rewrite lands in `description_ai` beside it, never over it."""
-    scan_id = await _completed_scan(client)
-    business_id = (await client.get(f"{API}/scans/{scan_id}/businesses")).json()["data"][0]["id"]
+    scan_id = await run_scan(client)
+    business_id = (await rows(client, scan_id))[0]["id"]
 
     detail = (await client.get(f"{API}/businesses/{business_id}")).json()
 
@@ -477,7 +371,7 @@ async def test_an_unknown_business_returns_404(client: AsyncClient) -> None:
 
 
 async def test_csv_export_returns_a_downloadable_file(client: AsyncClient) -> None:
-    scan_id = await _completed_scan(client)
+    scan_id = await run_scan(client)
 
     response = await client.get(f"{API}/exports/scans/{scan_id}/csv")
 
@@ -489,7 +383,7 @@ async def test_csv_export_returns_a_downloadable_file(client: AsyncClient) -> No
 
 
 async def test_scan_pdf_export_returns_a_pdf(client: AsyncClient) -> None:
-    scan_id = await _completed_scan(client)
+    scan_id = await run_scan(client)
 
     response = await client.get(f"{API}/exports/scans/{scan_id}/pdf")
 
@@ -498,8 +392,8 @@ async def test_scan_pdf_export_returns_a_pdf(client: AsyncClient) -> None:
 
 
 async def test_business_pdf_export_returns_a_pdf(client: AsyncClient) -> None:
-    scan_id = await _completed_scan(client)
-    business_id = (await client.get(f"{API}/scans/{scan_id}/businesses")).json()["data"][0]["id"]
+    scan_id = await run_scan(client)
+    business_id = (await rows(client, scan_id))[0]["id"]
 
     response = await client.get(f"{API}/exports/businesses/{business_id}/pdf")
 
