@@ -29,6 +29,19 @@ class ScanService:
         self._queue = queue
         self._settings = settings
 
+    async def _commit(self) -> None:
+        """End the unit of work here, not in the dependency teardown.
+
+        FastAPI runs a yield-dependency's teardown *after* the response has
+        gone out, so committing there means the API can hand a client a scan
+        id for a row that is not durable yet — and an immediate follow-up
+        request lands on another pooled connection and gets a 404. Observed
+        in about one request in twelve against real PostgreSQL.
+
+        Reads do not need this; only the operations that write.
+        """
+        await self._session.commit()
+
     # -- creating ----------------------------------------------------------
 
     async def create_scan(self, request: schemas.CreateScanRequest) -> Scan:
@@ -50,6 +63,7 @@ class ScanService:
             scan_id=scan.id,
             priority=10,
         )
+        await self._commit()
         return scan
 
     async def create_scan_from_csv(self, request: schemas.CreateScanFromCsvRequest) -> Scan:
@@ -62,6 +76,7 @@ class ScanService:
             scan_id=scan.id,
             priority=10,
         )
+        await self._commit()
         return scan
 
     async def rerun_scan(self, scan_id: uuid.UUID) -> Scan:
@@ -96,6 +111,7 @@ class ScanService:
         await self._queue.enqueue(
             JobType.DISCOVER, payload={"urls": urls}, scan_id=scan.id, priority=10
         )
+        await self._commit()
         return scan
 
     async def cancel_scan(self, scan_id: uuid.UUID) -> Scan:
@@ -106,12 +122,14 @@ class ScanService:
             )
         await self._queue.cancel_scan_jobs(scan_id)
         await self._repo.finish_scan(scan_id, status="cancelled")
+        await self._commit()
         return await self._require_scan(scan_id)
 
     async def delete_scan(self, scan_id: uuid.UUID) -> None:
         await self._require_scan(scan_id)
         await self._queue.cancel_scan_jobs(scan_id)
         await self._repo.delete_scan(scan_id)
+        await self._commit()
 
     # -- reading -----------------------------------------------------------
 
