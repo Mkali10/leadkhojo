@@ -10,6 +10,7 @@ and the one that produces false accusations:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -351,3 +352,68 @@ def test_no_cdn_is_a_low_severity_observation(now: datetime) -> None:
 
     assert finding.status is FindingStatus.WARN
     assert finding.severity is Severity.LOW
+
+
+# ---------------------------------------------------------------- DNS: unresolved
+# Regression. A live scan of iana.org reported "No SPF record" — a HIGH
+# finding — for a domain that publishes `v=spf1 redirect=icann.org`. The TXT
+# lookup had timed out, the collector returned an empty tuple, and the plugin
+# read that as absence. A re-run of the same domain minutes later passed.
+#
+# Absence and failure-to-look are different answers and must stay different.
+
+
+def test_a_failed_txt_lookup_is_not_a_missing_spf_record(now: datetime) -> None:
+    """The false positive that motivated `lookup_failed`."""
+    dns = make_dns(spf=None)
+    dns = replace(dns, lookup_failed=("TXT",))
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(dns=dns), now=now)
+
+    findings = DnsPlugin().run(ctx).findings
+
+    for check in ("DNS-01", "DNS-02"):
+        finding = find(findings, check)
+        assert finding.status is FindingStatus.NOT_APPLICABLE, (
+            f"{check} claimed a missing record from a lookup that never answered"
+        )
+
+
+def test_a_failed_dmarc_lookup_is_not_a_missing_dmarc_record(now: datetime) -> None:
+    dns = replace(make_dns(dmarc=None), lookup_failed=("DMARC",))
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(dns=dns), now=now)
+
+    findings = DnsPlugin().run(ctx).findings
+
+    assert find(findings, "DNS-03").status is FindingStatus.NOT_APPLICABLE
+    assert find(findings, "DNS-04").status is FindingStatus.NOT_APPLICABLE
+
+
+def test_one_failed_lookup_does_not_silence_the_others(now: datetime) -> None:
+    """A TXT timeout must not suppress the DMARC verdict we did obtain."""
+    dns = replace(make_dns(spf=None, dmarc="v=DMARC1; p=none"), lookup_failed=("TXT",))
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(dns=dns), now=now)
+
+    findings = DnsPlugin().run(ctx).findings
+
+    assert find(findings, "DNS-01").status is FindingStatus.NOT_APPLICABLE
+    assert find(findings, "DNS-03").status is FindingStatus.PASS
+    assert find(findings, "DNS-04").status is FindingStatus.FAIL
+
+
+def test_a_genuinely_absent_record_is_still_a_failure(now: datetime) -> None:
+    """The fix must not turn every missing record into a shrug."""
+    dns = make_dns(spf=None, dmarc=None)  # lookups succeeded, records absent
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(dns=dns), now=now)
+
+    findings = DnsPlugin().run(ctx).findings
+
+    assert find(findings, "DNS-01").status is FindingStatus.FAIL
+    assert find(findings, "DNS-03").status is FindingStatus.FAIL
+
+
+def test_the_lookup_failure_list_is_published_for_consumers(now: datetime) -> None:
+    """The CSV needs it to print "unknown" instead of "no"."""
+    dns = replace(make_dns(spf=None), lookup_failed=("TXT",))
+    ctx = PluginContext.for_testing(snapshot=make_snapshot(dns=dns), now=now)
+
+    assert DnsPlugin().run(ctx).artifacts["lookup_failed"] == ["TXT"]

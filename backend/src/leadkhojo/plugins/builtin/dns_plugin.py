@@ -6,6 +6,12 @@ No zone transfers, no subdomain enumeration.
 The distinction that matters here: `snapshot.dns is None` means we never
 looked, while `snapshot.dns.dmarc is None` means we looked and it was absent.
 The first is NOT_APPLICABLE; the second is a genuine FAIL.
+
+There is a third state, and it produced a real false positive: the lookup was
+attempted and failed. `dns.lookup_failed` names those record types, and every
+check below asks before treating an empty field as absence. Saying "you have
+no SPF record" to a domain that has one is the single most expensive mistake
+this plugin can make — it is the first thing the prospect will check.
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ class DnsPlugin(BasePlugin):
         version="1.0.0",
         kind=PluginKind.ANALYZER,
         description="SPF, DMARC, DKIM, MX and DNSSEC posture from public DNS records.",
-        provides=("spf", "dmarc", "mx", "dmarc_policy"),
+        provides=("spf", "dmarc", "mx", "dmarc_policy", "lookup_failed"),
         budget_ms=100,
     )
 
@@ -55,14 +61,31 @@ class DnsPlugin(BasePlugin):
             )
 
         domain = ctx.snapshot.domain
+
+        # A lookup that failed is not a record that is missing.
+        txt_ok = dns.resolved("TXT")
+        dmarc_ok = dns.resolved("DMARC")
+        mx_ok = dns.resolved("MX")
+        dnskey_ok = dns.resolved("DNSKEY")
+
         findings: list[Finding] = [
-            self._check_spf_present(ctx, dns.spf, domain),
-            self._check_spf_strictness(ctx, dns.spf),
-            self._check_dmarc_present(ctx, dns.dmarc, domain),
-            self._check_dmarc_policy(ctx, dns.dmarc, domain),
+            self._check_spf_present(ctx, dns.spf, domain)
+            if txt_ok
+            else _unresolved("DNS-01", f"{domain} TXT"),
+            self._check_spf_strictness(ctx, dns.spf)
+            if txt_ok
+            else _unresolved("DNS-02", f"{domain} TXT"),
+            self._check_dmarc_present(ctx, dns.dmarc, domain)
+            if dmarc_ok
+            else _unresolved("DNS-03", f"_dmarc.{domain} TXT"),
+            self._check_dmarc_policy(ctx, dns.dmarc, domain)
+            if dmarc_ok
+            else _unresolved("DNS-04", f"_dmarc.{domain} TXT"),
             self._check_dkim(ctx, dns.dkim_selectors),
-            self._check_mx(ctx, dns.mx),
-            self._check_dnssec(ctx, dns.dnssec),
+            self._check_mx(ctx, dns.mx) if mx_ok else _unresolved("DNS-06", f"{domain} MX"),
+            self._check_dnssec(ctx, dns.dnssec)
+            if dnskey_ok
+            else _unresolved("DNS-07", f"{domain} DNSKEY"),
         ]
 
         return self._result(
@@ -72,6 +95,9 @@ class DnsPlugin(BasePlugin):
                 "dmarc": dns.dmarc,
                 "mx": list(dns.mx),
                 "dmarc_policy": _dmarc_policy(dns.dmarc),
+                # So a consumer can tell "no record" from "we could not
+                # look". Without it the CSV renders both as "no".
+                "lookup_failed": list(dns.lookup_failed),
             },
         )
 
@@ -324,6 +350,21 @@ class DnsPlugin(BasePlugin):
             evidence={"dnssec": False, "checked_at": iso(ctx.now)},
             remediation="Enable DNSSEC signing at your DNS provider and publish a DS record.",
         )
+
+
+def _unresolved(check_id: str, query: str) -> Finding:
+    """The lookup did not complete, so we say nothing about the record.
+
+    Deliberately NOT_APPLICABLE rather than FAIL: an unanswered query is not
+    evidence of a missing record, and a finding without evidence is not
+    shippable.
+    """
+    return Finding.not_applicable(
+        check_id,
+        plugin_id=PLUGIN_ID,
+        category=CATEGORY,
+        reason=f"DNS lookup did not complete ({query}); absence cannot be inferred",
+    )
 
 
 def _dmarc_policy(record: str | None) -> str | None:

@@ -154,8 +154,10 @@ def _row(result: BusinessResult) -> dict[str, str]:
         "tls_version": _safe((certificate or {}).get("protocol") or ""),
         "has_hsts": _safe("yes" if headers.get("strict-transport-security") else "no"),
         "has_csp": _safe("yes" if headers.get("content-security-policy") else "no"),
-        "has_spf": _safe("yes" if result.artifact("dns", "spf") else "no"),
-        "has_dmarc": _safe("yes" if result.artifact("dns", "dmarc") else "no"),
+        # "unknown", not "no", when the lookup itself failed. A false "no"
+        # here becomes a false claim in a sales email.
+        "has_spf": _safe(_yes_no(result, "spf", "TXT")),
+        "has_dmarc": _safe(_yes_no(result, "dmarc", "DMARC")),
         "dmarc_policy": _safe(result.artifact("dns", "dmarc_policy") or ""),
         "missing_headers_count": _safe(len(missing)),
         "critical_findings": _safe(critical),
@@ -169,6 +171,19 @@ def _row(result: BusinessResult) -> dict[str, str]:
         "opportunities": _safe(" | ".join(o.title for o in opportunities)),
         "scanned_at": _safe(iso(snapshot.captured_at) if snapshot else ""),
     }
+
+
+def _yes_no(result: BusinessResult, key: str, lookup: str) -> str:
+    """yes / no / unknown for a DNS record.
+
+    "unknown" exists because an empty field has two causes: the record is
+    genuinely absent, or the query never got an answer. Only the first is
+    something we can tell a prospect.
+    """
+    if result.artifact("dns", key):
+        return "yes"
+    failed = result.artifact("dns", "lookup_failed") or ()
+    return "unknown" if lookup in failed else "no"
 
 
 def write_csv(results: Iterable[BusinessResult]) -> bytes:

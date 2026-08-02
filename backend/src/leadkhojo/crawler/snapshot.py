@@ -72,6 +72,13 @@ class DnsInfo:
     A field being None means NXDOMAIN or no record — which is itself a finding.
     Plugins must distinguish "we looked and it was absent" (dns is present,
     dmarc is None) from "we never looked" (dns itself is None).
+
+    There is a third case, and it is the dangerous one: the lookup was
+    attempted and *failed* — a timeout, a SERVFAIL, a truncated response we
+    could not retry. That is also an empty field, and treating it as absence
+    means telling a prospect "you have no SPF record" about a domain that
+    has one. `lookup_failed` names the record types this happened to, so a
+    plugin can report nothing instead of reporting something false.
     """
 
     a: tuple[str, ...] = ()
@@ -84,6 +91,18 @@ class DnsInfo:
     dkim_selectors: tuple[str, ...] = ()
     dnssec: bool = False
     resolved_ip: str | None = None
+
+    # Record types whose lookup errored rather than returning "no record".
+    # Labels are the query kinds the collector performs: A, AAAA, MX, NS,
+    # TXT, CNAME, DMARC, DKIM, DNSKEY.
+    lookup_failed: tuple[str, ...] = ()
+
+    def resolved(self, *kinds: str) -> bool:
+        """True when every named lookup actually completed.
+
+        Ask this before reporting the absence of a record as a problem.
+        """
+        return not any(kind in self.lookup_failed for kind in kinds)
 
     @property
     def spf(self) -> str | None:
@@ -223,6 +242,8 @@ class SiteSnapshot:
                 dkim_selectors=tuple(dns_raw.get("dkim_selectors") or ()),
                 dnssec=bool(dns_raw.get("dnssec", False)),
                 resolved_ip=dns_raw.get("resolved_ip"),
+                # Absent in snapshots captured before this field existed.
+                lookup_failed=tuple(dns_raw.get("lookup_failed") or ()),
             )
 
         robots_raw = data.get("robots")

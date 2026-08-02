@@ -28,19 +28,40 @@ logger = logging.getLogger(__name__)
 # enumeration, which is explicitly out of bounds.
 _DKIM_SELECTORS: tuple[str, ...] = ("default", "google", "k1", "selector1", "selector2")
 
-_DNS_TIMEOUT = 5.0
+# Per-attempt budget, and the total across retries. They must differ: a large
+# TXT set (iana.org publishes eleven records) overflows a UDP packet and has
+# to be retried over TCP, and with lifetime == timeout there is no room left
+# for that retry. The symptom is an intermittently empty TXT list.
+_DNS_TIMEOUT = 3.0
+_DNS_LIFETIME = 8.0
 
 
 async def collect_dns(domain: str) -> DnsInfo | None:
     """Resolve the public records the analyzers need. Never raises."""
     resolver = dns.asyncresolver.Resolver()
-    resolver.lifetime = _DNS_TIMEOUT
     resolver.timeout = _DNS_TIMEOUT
+    resolver.lifetime = _DNS_LIFETIME
 
-    async def query(name: str, rdtype: str) -> tuple[str, ...]:
+    failed: set[str] = set()
+
+    async def query(name: str, rdtype: str, label: str | None = None) -> tuple[str, ...]:
+        """Records, or () — and note whether () means absent or unknown.
+
+        NoAnswer and NXDOMAIN are answers: the record genuinely is not
+        there. Anything else (timeout, SERVFAIL, refusal, network error) is
+        a failure to look, and reporting it as absence would put a claim in
+        front of a prospect that we cannot support.
+        """
         try:
             answer = await resolver.resolve(name, rdtype)
-        except (dns.exception.DNSException, OSError):
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+            return ()
+        except (dns.exception.DNSException, OSError) as exc:
+            failed.add(label or rdtype)
+            logger.debug(
+                "dns.lookup_failed",
+                extra={"name": name, "rdtype": rdtype, "error": type(exc).__name__},
+            )
             return ()
         return tuple(r.to_text().strip('"') for r in answer)
 
@@ -51,7 +72,7 @@ async def collect_dns(domain: str) -> DnsInfo | None:
         query(domain, "NS"),
         query(domain, "TXT"),
         query(domain, "CNAME"),
-        query(f"_dmarc.{domain}", "TXT"),
+        query(f"_dmarc.{domain}", "TXT", label="DMARC"),
     )
 
     if not any((a, aaaa, mx, ns, txt)):
@@ -60,7 +81,10 @@ async def collect_dns(domain: str) -> DnsInfo | None:
         return None
 
     selector_results = await asyncio.gather(
-        *(query(f"{selector}._domainkey.{domain}", "TXT") for selector in _DKIM_SELECTORS)
+        *(
+            query(f"{selector}._domainkey.{domain}", "TXT", label="DKIM")
+            for selector in _DKIM_SELECTORS
+        )
     )
     found_selectors = tuple(
         selector
@@ -89,6 +113,7 @@ async def collect_dns(domain: str) -> DnsInfo | None:
         dkim_selectors=found_selectors,
         dnssec=dnssec,
         resolved_ip=a[0] if a else (aaaa[0] if aaaa else None),
+        lookup_failed=tuple(sorted(failed)),
     )
 
 
