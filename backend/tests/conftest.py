@@ -8,6 +8,7 @@ and instant. These builders are how a test constructs a snapshot without one.
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from leadkhojo.core.config import Settings
 from leadkhojo.core.types import (
@@ -152,18 +154,41 @@ def rules_dir() -> Path:
 
 
 # ---------------------------------------------------------------- database
-# Tests run against SQLite so the suite needs no service. The schema targets
-# PostgreSQL; JSON/UUID columns use dialect variants so the models are
-# identical either way.
+# Tests run against SQLite by default so the suite needs no service. The
+# schema targets PostgreSQL; JSON/UUID columns use dialect variants so the
+# models are identical either way.
 #
-# What SQLite cannot exercise, and must be verified against real PostgreSQL:
-#   * FOR UPDATE SKIP LOCKED in the job queue (no row locking in SQLite)
-#   * JSONB operators, if we ever query inside a snapshot payload
+# SQLite is not a substitute, and pretending otherwise cost real bugs:
+#   * it stores NUL bytes that PostgreSQL rejects outright (see the NUL
+#     regression tests in test_persistence.py)
+#   * it has no row locking, so FOR UPDATE SKIP LOCKED is never exercised
+#   * one shared connection hides read-your-write races across a pool
+#
+# So point the suite at a real PostgreSQL and run it again before shipping:
+#
+#     createdb leadkhojo_test
+#     LK_TEST_DATABASE_URL=postgresql+asyncpg://user:pw@localhost/leadkhojo_test \
+#         pytest tests/
+#
+# The schema is dropped and recreated per test, so use a throwaway database.
+
+TEST_DATABASE_URL = os.environ.get("LK_TEST_DATABASE_URL")
 
 
 @pytest_asyncio.fixture
 async def engine():  # type: ignore[no-untyped-def]
-    """A fresh in-memory database per test. No cross-test leakage."""
+    """A fresh database per test. No cross-test leakage either way."""
+    if TEST_DATABASE_URL:
+        test_engine = create_async_engine(TEST_DATABASE_URL, future=True, poolclass=NullPool)
+        async with test_engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+        try:
+            yield test_engine
+        finally:
+            await test_engine.dispose()
+        return
+
     test_engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
@@ -180,8 +205,9 @@ async def engine():  # type: ignore[no-untyped-def]
 async def session(engine):  # type: ignore[no-untyped-def]
     factory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
     async with factory() as db_session:
-        # PRAGMA is per-connection, so re-assert it on this one.
-        await db_session.execute(text("PRAGMA foreign_keys=ON"))
+        if not TEST_DATABASE_URL:
+            # PRAGMA is per-connection, so re-assert it on this one.
+            await db_session.execute(text("PRAGMA foreign_keys=ON"))
         yield db_session
 
 
