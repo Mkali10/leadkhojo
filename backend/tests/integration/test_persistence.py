@@ -6,7 +6,9 @@ what SQLite cannot exercise is called out in the tests that care.
 
 from __future__ import annotations
 
+import json
 import uuid
+from dataclasses import replace
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +25,12 @@ from leadkhojo.core.types import (
     Urgency,
 )
 from leadkhojo.db.models import Business, BusinessScore, FindingRecord, OpportunityRecord, Scan
-from leadkhojo.db.repository import ScanRepository
+from leadkhojo.db.repository import (
+    ScanRepository,
+    _clean_optional,
+    _clean_text,
+    _json_safe,
+)
 from leadkhojo.discovery.providers import DiscoveredBusiness
 from leadkhojo.opportunities.schemas import Opportunity
 from leadkhojo.pipeline.runner import BusinessResult
@@ -341,3 +348,58 @@ async def test_summaries_are_keyed_by_domain_for_comparison(session) -> None:  #
     assert "acme.com" in summaries
     assert summaries["acme.com"]["opportunity_rule_ids"] == ["ssl_renewal"]
     assert summaries["acme.com"]["scores"]["opportunity"] is not None
+
+
+# ---------------------------------------------------------------- NUL bytes
+# Regression, found by inserting into real PostgreSQL. A crawled page can
+# contain a NUL byte - a truncated response, a mislabelled binary, a broken
+# CMS template. PostgreSQL cannot store one in text or jsonb and aborts the
+# whole INSERT with UntranslatableCharacterError, so a single bad byte on a
+# single page loses the entire business behind three silent retries and an
+# unexplained timeout.
+#
+# SQLite accepts NUL, which is why the suite never noticed. These assert on
+# the sanitiser; against PostgreSQL the insert itself is the test.
+
+NUL = chr(0)  # chr(), not a literal: a real NUL byte in a .py file is a SyntaxError
+
+
+async def test_nul_bytes_are_stripped_from_strings() -> None:
+    assert _clean_text(f"before{NUL}after") == "beforeafter"
+    assert _clean_text("clean") == "clean"
+    assert _clean_optional(None) is None
+
+
+async def test_nul_bytes_are_stripped_throughout_a_json_payload() -> None:
+    payload = _json_safe(
+        {
+            f"key{NUL}": f"value{NUL}",
+            "nested": {"deep": [f"a{NUL}b", 1, None, True]},
+            "tuple": (f"x{NUL}",),
+        }
+    )
+
+    assert NUL not in json.dumps(payload)
+    assert payload["key"] == "value"
+    assert payload["nested"]["deep"][0] == "ab"
+    assert payload["tuple"][0] == "x"
+
+
+async def test_a_page_containing_a_nul_byte_still_persists(session) -> None:  # type: ignore[no-untyped-def]
+    """The end-to-end path: one hostile byte must not lose the business."""
+    repo = ScanRepository(session)
+    business = _discovered(name=f"Nul{NUL}Co", domain="nul.test")
+    scan = await repo.create_scan(keyword="nul", location=None, provider="manual", limit=5)
+    rows = await repo.add_businesses(scan.id, [business])
+
+    result = _result(business)
+    poisoned = replace(result, artifacts={**result.artifacts, "technologies": {"raw": f"a{NUL}b"}})
+    await repo.save_result(rows[0].id, poisoned)
+    await session.commit()
+
+    stored = await repo.get_business(rows[0].id)
+    assert stored is not None
+    assert stored.status == "completed"
+    assert NUL not in stored.name
+    assert NUL not in json.dumps(stored.artifacts)
+    assert NUL not in json.dumps(stored.snapshot.payload)

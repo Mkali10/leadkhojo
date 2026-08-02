@@ -133,8 +133,8 @@ class ScanRepository:
         rows = [
             Business(
                 scan_id=scan_id,
-                name=b.name,
-                website_url=str(b.website_url) if b.website_url else None,
+                name=_clean_text(b.name),
+                website_url=_clean_optional(str(b.website_url) if b.website_url else None),
                 domain=str(b.domain) if b.domain else None,
                 city=b.city,
                 country_code=b.country_code,
@@ -230,8 +230,10 @@ class ScanRepository:
         contacts = result.artifact("contacts", "contacts", []) or []
         business.primary_email = result.artifact("contacts", "primary_email")
         business.primary_phone = result.artifact("contacts", "primary_phone")
-        business.contacts = list(contacts)
-        business.technologies = list(result.artifact("technologies", "technologies", []) or [])
+        business.contacts = _json_safe(list(contacts))
+        business.technologies = _json_safe(
+            list(result.artifact("technologies", "technologies", []) or [])
+        )
         artifacts = _json_safe(result.artifacts)
         # Precompute severity counts so the results list can render them
         # without eager-loading findings — a 100-row page would otherwise
@@ -248,12 +250,12 @@ class ScanRepository:
             business.failure_reason = (
                 snapshot.failure_reason.value if snapshot.failure_reason else None
             )
-            business.failure_detail = snapshot.failure_detail
+            business.failure_detail = _clean_optional(snapshot.failure_detail)
             self._session.add(_snapshot_record(business_id, snapshot))
 
         business.status = "completed" if result.ok else "failed"
         if not result.ok and result.error and business.failure_detail is None:
-            business.failure_detail = result.error
+            business.failure_detail = _clean_text(result.error)
 
         self._session.add_all(
             FindingRecord(
@@ -263,10 +265,10 @@ class ScanRepository:
                 category=f.category,
                 status=f.status.value,
                 severity=f.severity.value,
-                title=f.title,
-                description=f.description,
+                title=_clean_text(f.title),
+                description=_clean_text(f.description),
                 evidence=_json_safe(f.evidence) or {"recorded": True},
-                remediation=f.remediation,
+                remediation=_clean_optional(f.remediation),
             )
             for f in result.findings
         )
@@ -275,12 +277,12 @@ class ScanRepository:
             OpportunityRecord(
                 business_id=business_id,
                 rule_id=str(o.rule_id),
-                title=o.title,
+                title=_clean_text(o.title),
                 category=o.category.value,
                 urgency=o.urgency.value,
-                description=o.description,
-                description_ai=o.description_ai,
-                pitch_angle=o.pitch_angle,
+                description=_clean_text(o.description),
+                description_ai=_clean_optional(o.description_ai),
+                pitch_angle=_clean_text(o.pitch_angle),
                 evidence=_json_safe(o.evidence),
                 triggered_by=list(o.triggered_by),
             )
@@ -295,7 +297,7 @@ class ScanRepository:
                     website_score=result.scores.website.total,
                     security_score=result.scores.security.total,
                     opportunity_score=result.scores.opportunity.total,
-                    breakdowns=result.scores.to_dict(),
+                    breakdowns=_json_safe(result.scores.to_dict()),
                 )
             )
 
@@ -391,7 +393,9 @@ def _snapshot_record(business_id: uuid.UUID, snapshot: SiteSnapshot) -> SiteSnap
         final_url=snapshot.final_url,
         http_status=snapshot.http_status,
         failure_reason=snapshot.failure_reason.value if snapshot.failure_reason else None,
-        payload=snapshot.to_dict(),
+        # The payload carries every captured page verbatim, so this is where
+        # a stray NUL byte from a stranger's server would reach the database.
+        payload=_json_safe(snapshot.to_dict()),
         page_count=len(snapshot.pages),
         total_bytes=snapshot.total_bytes,
         duration_ms=snapshot.duration_ms,
@@ -410,6 +414,26 @@ def _severity_counts(result: BusinessResult) -> dict[str, int]:
     return counts
 
 
+def _clean_text(value: str) -> str:
+    r"""Remove NUL bytes.
+
+    PostgreSQL cannot store \x00 in text or jsonb and aborts the whole INSERT
+    with UntranslatableCharacterError. We fetch pages from strangers' servers,
+    and a truncated response, a mislabelled binary or a broken CMS template is
+    enough to put one in the HTML. Losing an entire business because one byte
+    on one page was 0x00 is not acceptable, and the user would see it as an
+    unexplained timeout after three silent retries.
+
+    SQLite accepts NUL happily, so the whole suite stayed green — it took a
+    real PostgreSQL insert to find this.
+    """
+    return value.replace("\x00", "") if "\x00" in value else value
+
+
+def _clean_optional(value: str | None) -> str | None:
+    return None if value is None else _clean_text(value)
+
+
 def _json_safe(value: Any) -> Any:
     """Make a value storable as JSON.
 
@@ -418,16 +442,18 @@ def _json_safe(value: Any) -> Any:
     evidence without thinking about the database.
     """
     if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
+        return {_clean_text(str(k)): _json_safe(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe(v) for v in value]
     if isinstance(value, datetime):
         return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
     if isinstance(value, uuid.UUID):
         return str(value)
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str):
+        return _clean_text(value)
+    if isinstance(value, (int, float, bool)) or value is None:
         return value
-    return str(value)
+    return _clean_text(str(value))
 
 
 __all__ = ["ScanRepository"]
