@@ -65,14 +65,22 @@ class Condition:
             f = findings_by_id.get(self.check_id or "")
             return f is None or f.status is FindingStatus.NOT_APPLICABLE
 
-        if self.kind == "artifact_truthy":
-            return bool(artifacts.get(self.plugin or "", {}).get(self.key or ""))
+        # An artifact a plugin did not publish means that plugin could not
+        # evaluate — no pages captured, a failed crawl, a skipped dependency.
+        # It does NOT mean False. Treating a missing key as falsy generated
+        # "No website analytics installed" for a site that timed out and was
+        # never fetched, which is a claim we have no basis for.
+        if self.kind in ("artifact_truthy", "artifact_falsy", "artifact_equals"):
+            published = artifacts.get(self.plugin or "", {})
+            if (self.key or "") not in published:
+                return False
+            value = published.get(self.key or "")
 
-        if self.kind == "artifact_falsy":
-            return not artifacts.get(self.plugin or "", {}).get(self.key or "")
-
-        if self.kind == "artifact_equals":
-            return artifacts.get(self.plugin or "", {}).get(self.key or "") == self.value
+            if self.kind == "artifact_truthy":
+                return bool(value)
+            if self.kind == "artifact_falsy":
+                return not value
+            return value == self.value
 
         logger.warning("opportunity.unknown_condition", extra={"kind": self.kind})
         return False

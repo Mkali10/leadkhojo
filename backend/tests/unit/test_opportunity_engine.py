@@ -301,3 +301,53 @@ def test_a_failing_rewriter_never_breaks_the_pipeline() -> None:
         triggered_by=("X-01",),
     )
     assert apply_rewriter(opportunity, Exploding()).display_description == "Deterministic text."
+
+
+# ---------------------------------------------------------------- unobserved
+# Regression. A live scan of httpbin.org timed out — the homepage was never
+# fetched — and the engine still produced "No website analytics installed".
+#
+# The technologies plugin correctly publishes no has_analytics key when there
+# are no pages to inspect. `artifact_falsy` then read the missing key as
+# False. A key that was never published means the plugin could not evaluate,
+# which is not the same as evaluating to False.
+
+
+def test_a_missing_artifact_does_not_satisfy_artifact_falsy(
+    engine: OpportunityEngine, now: datetime
+) -> None:
+    """The httpbin.org false positive: no crawl, therefore no claim."""
+    produced = engine.generate((), {}, now=now, domain="httpbin.org")
+
+    assert "no_analytics" not in {o.rule_id for o in produced}
+
+
+def test_a_published_false_artifact_still_satisfies_artifact_falsy(
+    engine: OpportunityEngine, now: datetime
+) -> None:
+    """The fix must not silence the real case: we looked, and there is none."""
+    artifacts = {"technologies": {"has_analytics": False}}
+    produced = engine.generate((), artifacts, now=now, domain="acme.com")
+
+    assert "no_analytics" in {o.rule_id for o in produced}
+
+
+def test_a_missing_artifact_does_not_satisfy_artifact_truthy(
+    engine: OpportunityEngine, now: datetime
+) -> None:
+    artifacts: dict[str, dict[str, object]] = {"technologies": {}}
+    produced = engine.generate((), artifacts, now=now, domain="acme.com")
+
+    assert "cookie_consent_missing" not in {o.rule_id for o in produced}
+
+
+def test_a_failed_crawl_produces_no_website_opportunities(
+    engine: OpportunityEngine, now: datetime
+) -> None:
+    """Everything we can still say must come from DNS, which is collected
+    independently of the HTTP fetch."""
+    produced = engine.generate((NO_DMARC,), {}, now=now, domain="httpbin.org")
+
+    rule_ids = {o.rule_id for o in produced}
+    assert "no_analytics" not in rule_ids
+    assert rule_ids, "DNS-derived opportunities should survive a failed crawl"
